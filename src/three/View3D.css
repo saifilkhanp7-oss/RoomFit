@@ -1,0 +1,126 @@
+.view3d {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg);
+}
+.view3d-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(6px + var(--safe-top)) calc(8px + var(--safe-right)) 6px calc(4px + var(--safe-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.view3d-top .btn.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.view3d-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.view3d-title span {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.view3d-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.view3d-canvas canvas {
+  touch-action: none;
+}
+.view3d-presets {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px + var(--safe-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+.view3d-presets .btn {
+  box-shadow: var(--shadow);
+  min-height: 42px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.view3d-info {
+  position: absolute;
+  top: 10px;
+  left: calc(10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+.view3d-info > * {
+  pointer-events: auto;
+}
+.warn-badge.static {
+  position: static;
+}
+.view3d-ok {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ok);
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.view3d-note {
+  font-size: 12px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.view3d-warn-list {
+  max-width: 360px;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: var(--shadow-lg);
+}
+.view3d-lost {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+.view3d-help {
+  margin: 0;
+  padding: 6px 12px calc(6px + var(--safe-bottom));
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-3);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 599px) {
+  .view3d-presets {
+    bottom: calc(12px + var(--safe-bottom));
+  }
+}

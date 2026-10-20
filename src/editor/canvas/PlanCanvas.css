@@ -1,0 +1,19 @@
+.plan-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* No page scroll, no browser pinch-zoom, no double-tap zoom on the plan */
+  touch-action: none;
+  -ms-touch-action: none;
+  /* No text selection / iOS long-press callout while dragging */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: grab;
+}
+.plan-canvas:active {
+  cursor: grabbing;
+}
+.plan-canvas canvas {
+  display: block;
+}

@@ -1,0 +1,359 @@
+.home-page {
+  min-height: 100%;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  padding-bottom: calc(24px + var(--safe-bottom));
+}
+
+.home-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(8px + var(--safe-top)) 12px 8px 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  backdrop-filter: saturate(1.4) blur(12px);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.brand img {
+  border-radius: 8px;
+}
+
+.home-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 8px 16px;
+}
+
+/* Continue card */
+.continue-card {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  margin-bottom: 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  animation: pop-in 0.2s ease-out;
+}
+.continue-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--text-3);
+}
+.continue-thumb {
+  width: 96px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--canvas-bg);
+  padding: 6px;
+}
+.continue-body h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.continue-body p {
+  margin: 2px 0 12px;
+  color: var(--text-2);
+  font-size: 14px;
+  padding-right: 24px;
+}
+.continue-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .continue-thumb {
+    display: none;
+  }
+}
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 40px 8px;
+  max-width: 460px;
+  margin: 0 auto;
+}
+.empty-art svg {
+  width: 200px;
+  max-width: 70%;
+}
+.empty h1 {
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  margin: 20px 0 8px;
+}
+.empty p {
+  color: var(--text-2);
+  margin: 0 0 24px;
+}
+.btn-lg {
+  min-height: 52px;
+  padding: 0 24px;
+  font-size: 16px;
+  border-radius: 12px;
+}
+
+/* Grid */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 14px;
+}
+.section-head h1 {
+  font-size: 22px;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.home-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+.home-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+.home-card:active {
+  box-shadow: var(--shadow);
+}
+.home-card-main {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.home-thumb {
+  height: 140px;
+  background: var(--canvas-bg);
+  padding: 14px;
+}
+.plan-thumb {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.home-info {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 52px 14px 14px;
+}
+.home-info strong {
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-info span {
+  font-size: 13px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.home-more {
+  position: absolute;
+  right: 4px;
+  bottom: 8px;
+  color: var(--text-2);
+}
+
+/* Kind picker (new plan) */
+.kind-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.kind-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+  color: var(--text-2);
+}
+.kind-option strong {
+  color: var(--text);
+  margin-top: 6px;
+  font-size: 15px;
+}
+.kind-option span {
+  font-size: 13px;
+}
+.kind-option[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Action list (menus) */
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 16px;
+  text-align: left;
+}
+.action-item:active {
+  background: var(--surface-2);
+}
+.action-item.danger {
+  color: var(--danger);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-actions .btn {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.home-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+/* iPhone banners */
+.ios-card {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 14px 44px 14px 14px;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-size: 14px;
+}
+.ios-card.warn {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+  padding-right: 14px;
+}
+.ios-card-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+  margin-top: 1px;
+}
+.ios-card.warn .ios-card-icon {
+  color: var(--warn);
+}
+.ios-card p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+}
+.ios-card p svg {
+  vertical-align: -2px;
+}
+.ios-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.ios-card-actions .btn {
+  min-height: 40px;
+}
+.ios-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--text-3);
+}
+
+/* Help page */
+.help section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px 18px 10px;
+  margin-bottom: 14px;
+}
+.help h2 {
+  font-size: 17px;
+  margin: 14px 0 8px;
+}
+.help ul {
+  padding-left: 18px;
+  margin: 0 0 6px;
+}
+.help li {
+  margin-bottom: 8px;
+  color: var(--text-2);
+}
+.help li strong,
+.help p strong {
+  color: var(--text);
+}
+.help p {
+  color: var(--text-2);
+}
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: 0;
+}
+.dot.red {
+  background: var(--danger);
+}
+.dot.yellow {
+  background: var(--warn);
+}
+.shared-banner {
+  padding: 8px 16px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: center;
+}
