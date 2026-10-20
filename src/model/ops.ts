@@ -2,7 +2,9 @@
 import type { Floor, Item, Layout, Opening, Room, RoomKind, Side } from './types';
 import { cloneLayoutFresh, floorName, id, makeFloor, makeRoom } from './defaults';
 import { innerWallOf } from '../geometry/walls';
-import { itemBox } from '../geometry/items';
+import { itemBox, itemPoly } from '../geometry/items';
+import { pointInPoly } from '../geometry/poly';
+import { itemMount, itemSpan } from './catalog';
 import { descendantsOf, parentOf, spaceOfPoint } from '../geometry/spaces';
 
 export function addItem(f: Floor, item: Item): Floor {
@@ -221,4 +223,44 @@ export function nextLayoutName(names: string[]): string {
     if (!names.includes(n)) return n;
   }
   return `Layout ${names.length + 1}`;
+}
+
+// ---------- stacking ----------
+
+/**
+ * What this item could be put on top of: the highest floor item under its middle
+ * that isn't itself sitting on this item.
+ */
+export function supportUnder(f: Floor, itemId: string): Item | undefined {
+  const it = f.items.find((i) => i.id === itemId);
+  if (!it) return undefined;
+  const mine = itemSpan(it);
+  let best: Item | undefined;
+  for (const o of f.items) {
+    if (o.id === it.id || itemMount(o) !== 'floor') continue;
+    const s = itemSpan(o);
+    if (s.bottom >= mine.top - 20) continue; // it's on top of this item, not under it
+    if (!pointInPoly({ x: it.x, y: it.y }, itemPoly(o))) continue;
+    if (!best || s.top > itemSpan(best).top) best = o;
+  }
+  return best;
+}
+
+/** Put an item on top of another one (its bottom = the other's top). */
+export function stackOn(f: Floor, itemId: string, supportId: string): Floor {
+  const s = f.items.find((i) => i.id === supportId);
+  if (!s) return f;
+  return updateItem(f, itemId, { elevationMm: Math.round(itemSpan(s).top) });
+}
+
+export function putOnFloor(f: Floor, itemId: string): Floor {
+  return updateItem(f, itemId, { elevationMm: 0 });
+}
+
+/** "Let it be": hide a warning (or show it again). */
+export function setWarningOk(f: Floor, warningId: string, ok: boolean): Floor {
+  const cur = new Set(f.okWarnings ?? []);
+  if (ok) cur.add(warningId);
+  else cur.delete(warningId);
+  return { ...f, okWarnings: [...cur] };
 }

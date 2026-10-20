@@ -256,3 +256,95 @@
 .free-space span {
   color: var(--text-2);
 }
+
+/* warnings with actions */
+.warn-card {
+  border-radius: 10px;
+  overflow: hidden;
+}
+.warn-card.red {
+  background: var(--danger-soft);
+}
+.warn-card.yellow {
+  background: var(--warn-soft);
+}
+.warn-card .warn-item {
+  background: transparent;
+}
+.warn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px 10px 35px;
+}
+.warn-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.warn-btn.fix {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ignored {
+  margin-top: 12px;
+}
+.ignored-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  border: none;
+  background: none;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text-2);
+  padding: 0;
+}
+.ignored-card {
+  background: var(--surface-2);
+}
+.warn-item.muted {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+/* item height box */
+.height-box {
+  padding: 12px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.height-box > .field-label {
+  display: block;
+  margin-bottom: 10px;
+}
+.height-box .input {
+  background: var(--surface);
+}
+.stack-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 12px;
+}
+.stack-row .btn {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13.5px;
+}
+.warn-card.red .warn-item {
+  color: var(--danger);
+}
+.warn-card.yellow .warn-item {
+  color: var(--warn);
+}

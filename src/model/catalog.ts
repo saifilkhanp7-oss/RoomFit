@@ -18,6 +18,10 @@ export interface CatalogEntry {
   mount?: 'floor' | 'ceiling' | 'under';
   /** When dropped near a wall, turn its back (the "head" side) to the wall. */
   wallItem?: boolean;
+  /** Open space under it (legs), e.g. a cot or a table. Things that are low enough fit underneath. */
+  openBelowMm?: number;
+  /** Usually fixed to the wall (can hang off the floor). */
+  wallFixed?: boolean;
   /** Don't give walking-space warnings for this item (chairs sit close to tables etc). */
   noClearance?: boolean;
   multiOnly?: boolean;
@@ -27,36 +31,39 @@ export const CATEGORIES: Category[] = ['Beds', 'Study', 'Storage', 'Living', 'Ki
 
 export const CATALOG: CatalogEntry[] = [
   // Beds
-  { type: 'bed-single', label: 'Single bed', category: 'Beds', width: fi(3), depth: fi(6, 6), heightMm: fi(1, 6), shape: 'rect', color: '#7aa7e8', wallItem: true },
-  { type: 'bed-double', label: 'Double bed', category: 'Beds', width: fi(4, 6), depth: fi(6, 6), heightMm: fi(1, 8), shape: 'rect', color: '#7aa7e8', wallItem: true },
-  { type: 'bed-queen', label: 'Queen bed', category: 'Beds', width: fi(5), depth: fi(6, 8), heightMm: fi(1, 8), shape: 'rect', color: '#7aa7e8', wallItem: true },
+  { type: 'bed-single', label: 'Single bed', category: 'Beds', width: fi(3), depth: fi(6, 6), heightMm: fi(1, 6), shape: 'rect', color: '#7aa7e8', wallItem: true, openBelowMm: fi(1, 2) },
+  { type: 'bed-double', label: 'Double bed', category: 'Beds', width: fi(4, 6), depth: fi(6, 6), heightMm: fi(1, 8), shape: 'rect', color: '#7aa7e8', wallItem: true, openBelowMm: fi(0, 10) },
+  { type: 'bed-queen', label: 'Queen bed', category: 'Beds', width: fi(5), depth: fi(6, 8), heightMm: fi(1, 8), shape: 'rect', color: '#7aa7e8', wallItem: true, openBelowMm: fi(0, 10) },
   { type: 'bed-bunk', label: 'Bunk bed', category: 'Beds', width: fi(3), depth: fi(6, 6), heightMm: fi(5, 6), shape: 'rect', color: '#5d8fd9', wallItem: true },
   // Study
-  { type: 'study-table', label: 'Study table', category: 'Study', width: fi(4), depth: fi(2), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', wallItem: true },
-  { type: 'chair', label: 'Chair', category: 'Study', width: fi(1, 8), depth: fi(1, 8), heightMm: fi(3), shape: 'rect', color: '#a7835e', noClearance: true },
+  { type: 'study-table', label: 'Study table', category: 'Study', width: fi(4), depth: fi(2), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', wallItem: true, openBelowMm: fi(2, 3) },
+  { type: 'chair', label: 'Chair', category: 'Study', width: fi(1, 8), depth: fi(1, 8), heightMm: fi(3), shape: 'rect', color: '#a7835e', noClearance: true, openBelowMm: fi(1, 4) },
   { type: 'bookshelf', label: 'Bookshelf', category: 'Study', width: fi(2, 6), depth: fi(1), heightMm: fi(5), shape: 'rect', color: '#b58b62', wallItem: true },
   // Storage
   { type: 'cupboard', label: 'Cupboard', category: 'Storage', width: fi(3), depth: fi(2), heightMm: fi(6, 6), shape: 'rect', color: '#9c8b7a', wallItem: true },
-  { type: 'shelf', label: 'Shelf', category: 'Storage', width: fi(2), depth: fi(1), heightMm: fi(4), shape: 'rect', color: '#b39a80', wallItem: true },
+  { type: 'shelf', label: 'Shelf', category: 'Storage', width: fi(2), depth: fi(1), heightMm: fi(4), shape: 'rect', color: '#b39a80', wallItem: true, wallFixed: true },
   { type: 'shoe-rack', label: 'Shoe rack', category: 'Storage', width: fi(2), depth: fi(1), heightMm: fi(3), shape: 'rect', color: '#8f7d6c', wallItem: true },
   { type: 'drawers', label: 'Chest of drawers', category: 'Storage', width: fi(2, 6), depth: fi(1, 6), heightMm: fi(3), shape: 'rect', color: '#a38b73', wallItem: true },
+  { type: 'suitcase', label: 'Suitcase', category: 'Storage', width: fi(1, 6), depth: fi(0, 10), heightMm: fi(2, 2), shape: 'rect', color: '#5d6b7a', noClearance: true },
+  { type: 'box', label: 'Box / carton', category: 'Storage', width: fi(1, 6), depth: fi(1, 2), heightMm: fi(1, 2), shape: 'rect', color: '#c8a576', noClearance: true },
+  { type: 'stool', label: 'Stool', category: 'Storage', width: fi(1, 2), depth: fi(1), heightMm: fi(0, 10), shape: 'rect', color: '#8a9096', noClearance: true },
   // Living
   { type: 'sofa', label: 'Sofa', category: 'Living', width: fi(5), depth: fi(2, 9), heightMm: fi(2, 9), shape: 'rect', color: '#8fb98b', wallItem: true },
   { type: 'bean-bag', label: 'Bean bag', category: 'Living', width: fi(2, 6), depth: fi(2, 6), heightMm: fi(2), shape: 'round', color: '#e3a35c' },
-  { type: 'coffee-table', label: 'Coffee table', category: 'Living', width: fi(3), depth: fi(1, 6), heightMm: fi(1, 6), shape: 'rect', color: '#c9a27a' },
-  { type: 'tv-unit', label: 'TV unit', category: 'Living', width: fi(4), depth: fi(1, 4), heightMm: fi(1, 8), shape: 'rect', color: '#6f6a66', wallItem: true },
+  { type: 'coffee-table', label: 'Coffee table', category: 'Living', width: fi(3), depth: fi(1, 6), heightMm: fi(1, 6), shape: 'rect', color: '#c9a27a', openBelowMm: fi(1, 2) },
+  { type: 'tv-unit', label: 'TV unit', category: 'Living', width: fi(4), depth: fi(1, 4), heightMm: fi(1, 8), shape: 'rect', color: '#6f6a66', wallItem: true, openBelowMm: 0 },
   // Kitchen / dining
   { type: 'fridge', label: 'Fridge', category: 'Kitchen', width: fi(2), depth: fi(2, 2), heightMm: fi(5, 6), shape: 'rect', color: '#b9c4cf', wallItem: true },
-  { type: 'dining-table', label: 'Dining table', category: 'Kitchen', width: fi(4), depth: fi(2, 6), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a' },
+  { type: 'dining-table', label: 'Dining table', category: 'Kitchen', width: fi(4), depth: fi(2, 6), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', openBelowMm: fi(2, 3) },
   { type: 'stove', label: 'Stove counter', category: 'Kitchen', width: fi(4), depth: fi(2), heightMm: fi(2, 10), shape: 'rect', color: '#9aa3ab', wallItem: true },
   // Bathroom
   { type: 'toilet', label: 'Toilet (WC)', category: 'Bathroom', width: fi(1, 3), depth: fi(2, 3), heightMm: fi(2, 7), shape: 'rect', color: '#e8eef2', wallItem: true, noClearance: true },
-  { type: 'basin', label: 'Wash basin', category: 'Bathroom', width: fi(1, 8), depth: fi(1, 4), heightMm: fi(2, 10), shape: 'rect', color: '#e8eef2', wallItem: true, noClearance: true },
+  { type: 'basin', label: 'Wash basin', category: 'Bathroom', width: fi(1, 8), depth: fi(1, 4), heightMm: fi(2, 10), shape: 'rect', color: '#e8eef2', wallItem: true, noClearance: true, openBelowMm: fi(2) },
   { type: 'shower', label: 'Shower area', category: 'Bathroom', width: fi(3), depth: fi(3), shape: 'rect', color: '#b9dcef', mount: 'under', noClearance: true },
   { type: 'washing-machine', label: 'Washing machine', category: 'Bathroom', width: fi(2), depth: fi(2), heightMm: fi(2, 10), shape: 'rect', color: '#d5dbe0', wallItem: true },
   // Other
   { type: 'cooler', label: 'Cooler', category: 'Other', width: fi(1, 6), depth: fi(1, 6), heightMm: fi(4), shape: 'rect', color: '#9fc7d6' },
-  { type: 'mirror', label: 'Mirror', category: 'Other', width: fi(2), depth: fi(0, 4), heightMm: fi(5), shape: 'rect', color: '#bfe0f2', wallItem: true, noClearance: true },
+  { type: 'mirror', label: 'Mirror', category: 'Other', width: fi(2), depth: fi(0, 4), heightMm: fi(5), shape: 'rect', color: '#bfe0f2', wallItem: true, noClearance: true, wallFixed: true },
   { type: 'dustbin', label: 'Dustbin', category: 'Other', width: fi(1), depth: fi(1), heightMm: fi(1, 6), shape: 'round', color: '#7d8a8f', noClearance: true },
   { type: 'fan', label: 'Ceiling fan', category: 'Other', width: fi(4), depth: fi(4), shape: 'round', color: '#9aa0a6', mount: 'ceiling', noClearance: true },
   { type: 'rug', label: 'Rug', category: 'Other', width: fi(5), depth: fi(3), shape: 'rect', color: '#d9b8c4', mount: 'under', noClearance: true },
@@ -95,4 +102,26 @@ export function isStairs(item: Item) {
 /** Height used for 3D and height checks: what the user typed, else the catalog default. */
 export function itemHeight(item: Item): number | undefined {
   return item.heightMm ?? catalogEntry(item.type)?.heightMm;
+}
+
+/** Height to use for stacking when nothing is known (a typical table/box). */
+export const DEFAULT_ITEM_HEIGHT = 750;
+
+export const itemElevation = (item: Item) => Math.max(0, item.elevationMm ?? 0);
+
+/** Open space under the item (0 = closed down to the floor). */
+export function itemOpenBelow(item: Item): number {
+  const h = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
+  return Math.max(0, Math.min(h - 20, item.openBelowMm ?? catalogEntry(item.type)?.openBelowMm ?? 0));
+}
+
+/** Bottom and top of the item, from the floor. */
+export function itemSpan(item: Item): { bottom: number; top: number; solidBottom: number } {
+  const bottom = itemElevation(item);
+  const h = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
+  return { bottom, top: bottom + h, solidBottom: bottom + itemOpenBelow(item) };
+}
+
+export function isWallFixed(item: Item): boolean {
+  return item.wallMounted ?? catalogEntry(item.type)?.wallFixed ?? false;
 }

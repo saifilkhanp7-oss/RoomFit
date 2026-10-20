@@ -39,6 +39,23 @@ export function Help() {
           </ul>
         </section>
         <section>
+          <h2>Stacking and things under beds</h2>
+          <ul>
+            <li>
+              Every item has a <strong>height</strong> and a <strong>height from the floor</strong>. Put a suitcase on top of a cupboard: select it, then tap the{' '}
+              <strong>stack</strong> button (or "On top of Cupboard" in its settings). It shows a small ↑ badge with its height from the floor.
+            </li>
+            <li>
+              Beds and tables can be <strong>open underneath (on legs)</strong> or <strong>closed</strong>. Set the open space height, e.g. 1′ 2″ under a hostel cot. Boxes or suitcases that are low enough fit
+              under it without a warning.
+            </li>
+            <li>If something is up in the air with nothing under it, you get a warning. Shelves and mirrors fixed to the wall are allowed to hang: tick "Fixed to the wall".</li>
+            <li>
+              Every warning has <strong>Let it be</strong>. Use it when you know it's fine, e.g. a chair pushed under the table. You can bring it back from "Let be" in the warnings list.
+            </li>
+          </ul>
+        </section>
+        <section>
           <h2>Rooms, doors and windows</h2>
           <ul>
             <li>

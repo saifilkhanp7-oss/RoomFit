@@ -20,6 +20,7 @@ See [spec.md](spec.md) for the full feature list.
 - 36 furniture items incl. bathroom fittings and **vehicles** (hatchback, sedan, SUV, motorbike, scooter, bicycle) + custom items
 - Drag, rotate, snap, colour, label, lock, undo/redo, duplicate
 - Warnings: overlap, outside the room, in a wall, on stairs, blocking a door, tight walking space, **no space to open car doors, gate narrower than the car**, and height checks
+- **Stacking and height from floor**: put a suitcase on top of a cupboard, boxes under an open cot. Beds and tables are *open (on legs)* or *closed* underneath, with the open space height. Things in the air get a warning; shelves and mirrors can be *fixed to the wall*. Every warning has a one-tap fix where possible and **Let it be**
 - Stairs (straight, L, U) with stair openings on the floor above, measuring, 3D view
 - Share link, PNG export, backup file, installable app (PWA), light/dark mode, iPhone friendly
 
@@ -107,6 +108,7 @@ Open the Vercel link in **Safari**:
 - [ ] Close Safari and open again: still logged in. Log in on a second device: the same plans are there.
 - [ ] Log out, then "Forgot password?" with the recovery code: it logs in and gives a new code.
 - [ ] Rooms → Add hall: the leftover space shows its sizes. Add a bathroom inside a room, and a balcony.
+- [ ] Add a cupboard and a suitcase → warning → "Put Suitcase on top of Cupboard". Add a chair at the study table → "Let it be".
 - [ ] Rooms → Add a floor or basement → basement: add a car. Make the garage door narrow: yellow warning.
 - [ ] One finger drags furniture and moves the plan. Two fingers pinch. The page never scrolls or zooms by itself.
 - [ ] More → 3D view turns smoothly. Save as image and Download backup open the share sheet.

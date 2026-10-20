@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ArrowLeft, Box as BoxIcon, Eye, RotateCcw, Scissors } from 'lucide-react';
 import type { Floor, Item, Room, Unit } from '../model/types';
-import { itemHeight, itemMount, isStairs } from '../model/catalog';
+import { itemElevation, itemHeight, itemMount, itemOpenBelow, isStairs } from '../model/catalog';
 import { DEFAULT_CEILING, DEFAULT_SILL, DEFAULT_WINDOW_H, FAN_DROP, roomOfPoint, type WarningResult } from '../geometry/warnings';
 import { DOOR_HEIGHT, neighbors, openingGeom, sideLine, SIDES, wallThickness } from '../geometry/walls';
 import { byDepth, flushWithParent, kindOf, parentOf } from '../geometry/spaces';
@@ -127,7 +127,8 @@ function ItemMesh({ it, floor, state }: { it: Item; floor: Floor; state: 'red' |
   const ceiling = room ? ceilingOf(floor, room) : DEFAULT_CEILING;
   const mount = itemMount(it);
   let h = itemHeight(it) ?? 750;
-  let y0 = 0;
+  let y0 = mount === 'floor' ? itemElevation(it) : 0;
+  const open = mount === 'floor' && !isStairs(it) && it.shape === 'rect' && it.type !== 'bed-bunk' ? itemOpenBelow(it) : 0;
   if (mount === 'under') h = 12;
   if (isStairs(it)) h = Math.min(ceiling, 3000);
   if (mount === 'ceiling') {
@@ -166,7 +167,7 @@ function ItemMesh({ it, floor, state }: { it: Item; floor: Floor; state: 'red' |
     const lower = 450;
     const upper = Math.max(lower + 400, h - 250);
     return (
-      <group position={[it.x * M, 0, it.y * M]} rotation={[0, rotY, 0]}>
+      <group position={[it.x * M, y0 * M, it.y * M]} rotation={[0, rotY, 0]}>
         {[lower, upper].map((yy) => (
           <mesh key={yy} position={[0, (yy - 100) * M, 0]}>
             <boxGeometry args={[it.width * M, 200 * M, it.depth * M]} />
@@ -178,6 +179,27 @@ function ItemMesh({ it, floor, state }: { it: Item; floor: Floor; state: 'red' |
             <mesh key={`${sx}${sz}`} position={[(sx * (it.width / 2 - 25)) * M, (h / 2) * M, (sz * (it.depth / 2 - 25)) * M]}>
               <boxGeometry args={[50 * M, h * M, 50 * M]} />
               <meshStandardMaterial color="#6b7280" emissive={emissive} />
+            </mesh>
+          )),
+        )}
+      </group>
+    );
+  }
+  if (open > 0) {
+    // open underneath: a top part on four legs (cot, table, chair)
+    const leg = Math.max(30, Math.min(60, Math.min(it.width, it.depth) * 0.06));
+    const topH = h - open;
+    return (
+      <group position={[it.x * M, y0 * M, it.y * M]} rotation={[0, rotY, 0]}>
+        <mesh position={[0, (open + topH / 2) * M, 0]}>
+          <boxGeometry args={[it.width * M, topH * M, it.depth * M]} />
+          <meshStandardMaterial color={color} emissive={emissive} roughness={0.8} />
+        </mesh>
+        {[-1, 1].flatMap((sx) =>
+          [-1, 1].map((sz) => (
+            <mesh key={`${sx}${sz}`} position={[(sx * (it.width / 2 - leg / 2)) * M, (open / 2) * M, (sz * (it.depth / 2 - leg / 2)) * M]}>
+              <boxGeometry args={[leg * M, open * M, leg * M]} />
+              <meshStandardMaterial color="#8b9097" emissive={emissive} />
             </mesh>
           )),
         )}

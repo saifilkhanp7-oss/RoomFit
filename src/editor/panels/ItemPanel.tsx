@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Copy, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus } from 'lucide-react';
+import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus } from 'lucide-react';
 import type { Item, Unit } from '../../model/types';
 import { LengthInput } from '../../components/LengthInput';
-import { COLOR_SWATCHES, catalogEntry, isStairs, itemMount } from '../../model/catalog';
+import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow } from '../../model/catalog';
 import { normAngle } from '../../geometry/items';
 import { DEFAULT_CEILING, FAN_DROP } from '../../geometry/warnings';
 import { formatLength } from '../../model/units';
@@ -18,9 +18,15 @@ interface Props {
   onDuplicate: () => void;
   onDelete: () => void;
   onSaveTemplate?: () => void;
+  /** Item it could be put on top of (under its middle). */
+  support?: Item;
+  onStack: () => void;
+  onFloor: () => void;
 }
 
-export function ItemPanel({ item, unit, heights, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate }: Props) {
+export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate, support, onStack, onFloor }: Props) {
+  const height = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
+  const openBelow = itemOpenBelow(item);
   const [label, setLabel] = useState(item.label);
   const [rot, setRot] = useState(String(Math.round(item.rotation)));
   useEffect(() => setLabel(item.label), [item.id, item.label]);
@@ -53,31 +59,85 @@ export function ItemPanel({ item, unit, heights, ceilingMm, onChange, onRotate, 
         <LengthInput id="item-d" label="Depth" unit={unit} valueMm={item.depth} min={30} max={20000} onChange={(depth) => onChange({ depth })} />
       </div>
 
-      {heights && mount !== 'under' && !isStairs(item) && (
-        <>
-          {mount === 'ceiling' ? (
-            <LengthInput
-              id="item-h"
-              label="Fan height from floor"
-              unit={unit}
-              valueMm={item.heightMm ?? ceiling - FAN_DROP}
-              min={1500}
-              max={6000}
-              onChange={(heightMm) => onChange({ heightMm })}
-            />
-          ) : (
+      {mount === 'ceiling' && (
+        <LengthInput
+          id="item-h"
+          label="Fan height from floor"
+          unit={unit}
+          valueMm={item.heightMm ?? ceiling - FAN_DROP}
+          min={1500}
+          max={6000}
+          onChange={(heightMm) => onChange({ heightMm })}
+        />
+      )}
+
+      {mount === 'floor' && !isStairs(item) && (
+        <div className="height-box">
+          <span className="field-label">Height and stacking</span>
+          <div className="row">
             <LengthInput
               id="item-h"
               label="Height"
               unit={unit}
-              valueMm={item.heightMm ?? entry?.heightMm ?? 750}
+              valueMm={item.heightMm ?? entry?.heightMm ?? DEFAULT_ITEM_HEIGHT}
               min={10}
               max={6000}
               onChange={(heightMm) => onChange({ heightMm })}
             />
-          )}
+            <LengthInput
+              id="item-elev"
+              label="Height from floor"
+              unit={unit}
+              valueMm={itemElevation(item)}
+              min={0}
+              max={6000}
+              onChange={(elevationMm) => onChange({ elevationMm })}
+            />
+          </div>
           {item.heightMm === undefined && <p className="hint" style={{ marginTop: -8 }}>Typical height. Change it if yours is different.</p>}
-        </>
+          <div className="stack-row">
+            {support && (
+              <button className="btn" onClick={onStack}>
+                <Layers size={16} /> On top of {support.label}
+              </button>
+            )}
+            {itemElevation(item) > 0 && (
+              <button className="btn" onClick={onFloor}>
+                <ArrowDownToLine size={16} /> On the floor
+              </button>
+            )}
+          </div>
+
+          <div className="field">
+            <span className="field-label">Underneath</span>
+            <div className="segmented" role="group" aria-label="Underneath">
+              <button aria-pressed={openBelow > 0} onClick={() => onChange({ openBelowMm: openBelow > 0 ? openBelow : Math.min(fi(1, 2), Math.max(0, height - 100)) })}>
+                Open (legs)
+              </button>
+              <button aria-pressed={openBelow === 0} onClick={() => onChange({ openBelowMm: 0 })}>
+                Closed
+              </button>
+            </div>
+          </div>
+          {openBelow > 0 && (
+            <LengthInput
+              id="item-open"
+              label="Open space height (floor to bottom)"
+              unit={unit}
+              valueMm={openBelow}
+              min={10}
+              max={Math.max(20, height - 20)}
+              onChange={(openBelowMm) => onChange({ openBelowMm })}
+            />
+          )}
+          <p className="hint" style={{ marginTop: -6 }}>
+            {openBelow > 0 ? `Things up to ${formatLength(openBelow, unit)} tall fit under it.` : 'Nothing fits under it (like a box bed or cupboard).'}
+          </p>
+          <label className="check-row">
+            <input type="checkbox" checked={isWallFixed(item)} onChange={(e) => onChange({ wallMounted: e.target.checked })} />
+            Fixed to the wall (can hang in the air)
+          </label>
+        </div>
       )}
 
       {isStairs(item) && (

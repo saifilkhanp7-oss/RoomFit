@@ -2,7 +2,7 @@
 // Used by the editor canvas, the shared-plan viewer and PNG export.
 import type { Floor, Item, LayoutView, Unit } from '../../model/types';
 import { formatLength, gridSteps } from '../../model/units';
-import { isStairs, itemMount } from '../../model/catalog';
+import { isStairs, itemElevation, itemMount, itemOpenBelow } from '../../model/catalog';
 import { childBlocks, doorSwings, openingGeom, roomOuterBox, sharedWallBoxes } from '../../geometry/walls';
 import { byDepth, childrenOf, freeRects, kindOf, rectArea } from '../../geometry/spaces';
 import type { Room, RoomKind } from '../../model/types';
@@ -339,11 +339,24 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
 
   // ---------- items: rugs under, then furniture, then ceiling items ----------
   const order = { under: 0, floor: 1, ceiling: 2 } as const;
-  const items = [...floor.items].sort((a, b) => order[itemMount(a)] - order[itemMount(b)]);
+  // lower things first, so a suitcase on a cupboard is drawn on top of it
+  const items = [...floor.items].sort((a, b) => order[itemMount(a)] - order[itemMount(b)] || itemElevation(a) - itemElevation(b));
   for (const it of items) {
     const red = !s.clean && !!s.warnings?.red.has(it.id);
     const yellow = !s.clean && !red && !!s.warnings?.yellow.has(it.id);
-    drawItem(c, it, z, K, red, yellow);
+    if (itemElevation(it) > 30 && itemMount(it) === 'floor') {
+      // soft shadow so stacked things look like they sit on top
+      c.save();
+      c.shadowColor = 'rgba(0,0,0,0.35)';
+      c.shadowBlur = 8;
+      c.shadowOffsetY = 2;
+      drawItem(c, it, z, K, red, yellow);
+      c.restore();
+      const e = itemElevation(it);
+      const top = itemPoly({ ...it, shape: 'rect' });
+      const tr = top.reduce((m, q) => (q.x - q.y > m.x - m.y ? q : m), top[0]);
+      if (Math.min(it.width, it.depth) * z > 14) badge(c, `↑ ${formatLength(e, s.unit)}`, tr.x, tr.y, z, K);
+    } else drawItem(c, it, z, K, red, yellow);
   }
 
   // ---------- room labels & sizes ----------
@@ -623,6 +636,18 @@ export function drawItem(c: CanvasRenderingContext2D, it: Item, z: number, K: Pa
     c.stroke();
     c.setLineDash([]);
 
+    // legs: small dots in the corners when there's open space underneath
+    if (itemOpenBelow(it) > 0 && it.shape === 'rect') {
+      const r = Math.max(px(2), Math.min(w, d) * 0.035);
+      const ix = w / 2 - r * 1.8;
+      const iy = d / 2 - r * 1.8;
+      c.fillStyle = shade(base, -0.45);
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        c.beginPath();
+        c.arc(sx * ix, sy * iy, r, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
     // simple details so items are recognisable from above
     const detail = shade(base, -0.25);
     c.strokeStyle = detail;
@@ -822,4 +847,19 @@ function drawRoomFloor(c: CanvasRenderingContext2D, r: Room, K: Palette, z: numb
     c.stroke();
     c.restore();
   }
+}
+
+/** Small pill label, e.g. the height of a stacked item. */
+function badge(c: CanvasRenderingContext2D, text: string, x: number, y: number, z: number, K: Palette) {
+  const fs = 10.5 / z;
+  c.font = `700 ${fs}px ${FONT}`;
+  const w = c.measureText(text).width + 8 / z;
+  const h = fs + 6 / z;
+  c.fillStyle = K.select;
+  roundRect(c, x - w / 2, y - h / 2, w, h, h / 2);
+  c.fill();
+  c.fillStyle = '#ffffff';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(text, x, y + 0.5 / z);
 }

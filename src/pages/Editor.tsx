@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   AlertTriangle, ArrowLeft, Box, ChevronDown, Copy, DoorOpen, Grid3x3, Image as ImageIcon, Layers, Maximize, Minus,
   MoreHorizontal, Pencil, Plus, Redo2, RotateCcw, RotateCw, Ruler, Settings as SettingsIcon, Share2, Sofa, SquarePlus,
-  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car,
+  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine,
 } from 'lucide-react';
 import { canRedo, canUndo, findHome, useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -29,7 +29,7 @@ import { computeWarnings, roomOfPoint, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warn
 import { rotationFacingWall, snapItemBox, snapRoom, type Guide } from '../geometry/snapping';
 import { snapMeasurePoint } from '../geometry/measure';
 import * as ops from '../model/ops';
-import { itemMount } from '../model/catalog';
+import { itemElevation, itemMount, itemSpan } from '../model/catalog';
 import { id as newId } from '../model/defaults';
 import { MM_PER_FOOT, MM_PER_INCH } from '../model/units';
 import type { Floor, Item, LayoutView, Side } from '../model/types';
@@ -188,7 +188,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const hitItem = (p: Pt, f = floorRef.current): Item | undefined => {
     const tol = 6 / viewRef.current!.zoom;
     const layers = [
-      f.items.filter((i) => itemMount(i) === 'floor'),
+      f.items.filter((i) => itemMount(i) === 'floor').sort((a, b) => itemElevation(a) - itemElevation(b)),
       f.items.filter((i) => itemMount(i) === 'ceiling'),
       f.items.filter((i) => itemMount(i) === 'under'),
     ];
@@ -508,6 +508,22 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     if (sheet === 'props') setSheet(null);
   };
 
+  // ---------- stacking ----------
+  const selSupport = selItem ? ops.supportUnder(floor, selItem.id) : undefined;
+  const onTopAlready = !!(selItem && selSupport && Math.abs(itemElevation(selItem) - itemSpan(selSupport).top) < 30);
+  const stackSelected = (support: Item) => {
+    if (!selItem) return;
+    edit((f) => ops.stackOn(f, selItem.id, support.id));
+    toast(`${selItem.label} is now on top of ${support.label}`);
+  };
+  const applyFix = (w: Warning) => {
+    const fx = w.fix;
+    if (!fx) return;
+    edit((f) => (fx.action === 'stack' ? ops.stackOn(f, fx.itemId, fx.supportId) : ops.putOnFloor(f, fx.itemId)));
+    toast('Done');
+  };
+  const letItBe = (w: Warning, ok: boolean) => edit((f) => ops.setWarningOk(f, w.id, ok));
+
   const undo = () => {
     S.undo(homeId, layoutId);
     setGuides([]);
@@ -628,6 +644,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
           onRotate={rotateBy}
           onDuplicate={duplicate}
           onDelete={deleteSelected}
+          support={selSupport}
+          onStack={() => selSupport && stackSelected(selSupport)}
+          onFloor={() => edit((f) => ops.putOnFloor(f, selItem.id))}
           onSaveTemplate={
             selItem.type === 'custom' && !templates.some((t) => t.label === selItem.label && t.width === selItem.width && t.depth === selItem.depth)
               ? () => {
@@ -843,6 +862,16 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                   </button>
                 </>
               )}
+              {selItem && !selItem.locked && selSupport && !onTopAlready && (
+                <button className="icon-btn" aria-label={`Put on top of ${selSupport.label}`} title={`Put on top of ${selSupport.label}`} onClick={() => stackSelected(selSupport)}>
+                  <Layers size={19} />
+                </button>
+              )}
+              {selItem && !selItem.locked && itemElevation(selItem) > 0 && (
+                <button className="icon-btn" aria-label="Put on the floor" title="Put on the floor" onClick={() => edit((f) => ops.putOnFloor(f, selItem.id))}>
+                  <ArrowDownToLine size={19} />
+                </button>
+              )}
               {selItem && (
                 <button className="icon-btn" aria-label="Duplicate" onClick={duplicate}>
                   <Copy size={19} />
@@ -933,7 +962,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               <h3>
                 Warnings {warnings.list.length > 0 && <span className={`count ${redCount ? 'red' : 'yellow'}`}>{warnings.list.length}</span>}
               </h3>
-              <WarningsPanel warnings={warnings.list} onPick={pickWarning} />
+              <WarningsPanel warnings={warnings.list} ignored={warnings.ignored} onPick={pickWarning} onFix={applyFix} onLetItBe={letItBe} />
             </div>
           </aside>
         )}
@@ -957,7 +986,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       )}
       {sheet === 'warnings' && (
         <Dialog title="Warnings" subtitle="Tap a warning to see it on the plan." onClose={() => setSheet(null)}>
-          <WarningsPanel warnings={warnings.list} onPick={pickWarning} />
+          <WarningsPanel warnings={warnings.list} ignored={warnings.ignored} onPick={pickWarning} onFix={applyFix} onLetItBe={letItBe} />
         </Dialog>
       )}
       {sheet === 'rooms' && (

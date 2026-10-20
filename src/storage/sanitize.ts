@@ -57,6 +57,9 @@ function item(i: any): Item | null {
     shape: oneOf(i.shape, ['rect', 'round'] as const, 'rect'),
     color: color(i.color),
     heightMm: optNum(i.heightMm, 0, 20000),
+    elevationMm: optNum(i.elevationMm, 0, 20000),
+    openBelowMm: optNum(i.openBelowMm, 0, 20000),
+    wallMounted: typeof i.wallMounted === 'boolean' ? i.wallMounted : undefined,
     mount: i.mount ? oneOf(i.mount, ['floor', 'ceiling', 'under'] as const, 'floor') : undefined,
     locked: i.locked === true ? true : undefined,
   };
@@ -84,6 +87,9 @@ function floor(f: any, index: number): Floor | null {
     sharedWalls: [],
     openings: (Array.isArray(f.openings) ? f.openings : []).map((o: any) => opening(o, ids)).filter(Boolean) as Opening[],
     items: (Array.isArray(f.items) ? f.items : []).map(item).filter(Boolean).slice(0, 2000) as Item[],
+    ...(Array.isArray(f.okWarnings)
+      ? { okWarnings: f.okWarnings.filter((w: unknown) => typeof w === 'string' && w.length < 120).slice(0, 500) }
+      : {}),
   };
 }
 

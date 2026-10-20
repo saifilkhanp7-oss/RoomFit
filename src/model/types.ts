@@ -47,6 +47,8 @@ export interface Floor {
   sharedWalls: SharedWall[];
   openings: Opening[];
   items: Item[];
+  /** Warnings the user chose to "let it be". */
+  okWarnings?: string[];
 }
 
 export type RoomKind = 'room' | 'hall' | 'bathroom' | 'kitchen' | 'balcony' | 'parking' | 'store';
@@ -97,6 +99,12 @@ export interface Item {
   shape: 'rect' | 'round';
   color: string;
   heightMm?: number;
+  /** Height of the item's bottom from the floor (e.g. a suitcase on top of a cupboard). 0 = on the floor. */
+  elevationMm?: number;
+  /** Height of the open space underneath (bed or table on legs). 0 = closed down to the floor. */
+  openBelowMm?: number;
+  /** Fixed to the wall (shelf, mirror, TV): allowed to be off the floor with nothing under it. */
+  wallMounted?: boolean;
   mount?: 'floor' | 'ceiling' | 'under';
   locked?: boolean;
   stairs?: {

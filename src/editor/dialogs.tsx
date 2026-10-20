@@ -276,7 +276,7 @@ export function CustomItemDialog(props: {
   const [label, setLabel] = useState('');
   const [width, setWidth] = useState(fi(2));
   const [depth, setDepth] = useState(fi(2));
-  const [heightMm, setHeight] = useState<number | undefined>(undefined);
+  const [heightMm, setHeight] = useState<number | undefined>(fi(2));
   const [shape, setShape] = useState<'rect' | 'round'>('rect');
   const [color, setColor] = useState(CUSTOM_COLOR);
   const [save, setSave] = useState(true);
@@ -297,9 +297,7 @@ export function CustomItemDialog(props: {
           <LengthInput id="custom-w" label="Width" unit={props.unit} valueMm={width} min={30} max={20000} onChange={setWidth} />
           <LengthInput id="custom-d" label="Depth" unit={props.unit} valueMm={depth} min={30} max={20000} onChange={setDepth} />
         </div>
-        {props.heights && (
-          <LengthInput id="custom-h" label="Height (optional)" unit={props.unit} valueMm={heightMm ?? fi(3)} min={10} max={6000} onChange={setHeight} />
-        )}
+        <LengthInput id="custom-h" label="Height" unit={props.unit} valueMm={heightMm ?? fi(2)} min={10} max={6000} onChange={setHeight} />
         <div className="field">
           <span className="field-label">Shape</span>
           <div className="segmented" role="group" aria-label="Shape">
