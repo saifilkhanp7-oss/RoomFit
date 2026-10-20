@@ -35,6 +35,41 @@ export interface Layout {
   name: string;
   floors: Floor[]; // bottom -> top
   view?: LayoutView;
+  /** Bricks & tiles cost settings. */
+  estimate?: Estimate;
+}
+
+export interface BrickSpec {
+  lengthMm: number;
+  widthMm: number;
+  heightMm: number;
+  /** Mortar gap between two bricks. */
+  jointMm: number;
+  price: number;
+  /** Extra for broken bricks, %. */
+  wastePct: number;
+}
+
+export interface TileSpec {
+  lengthMm: number;
+  widthMm: number;
+  /** Gap between tiles (grout). */
+  gapMm: number;
+  price: number;
+}
+
+export interface Estimate {
+  currency: string;
+  brick: BrickSpec;
+  walls: boolean;
+  stairs: boolean;
+  ceiling: boolean;
+  ceilingMm: number;
+  tile: TileSpec;
+  /** Extra tiles for cutting and breakage, %. */
+  tileWastePct: number;
+  /** Rooms with their own tile, or no tiles. Others use `tile`. */
+  rooms: Record<string, { mode: 'own' | 'none'; tile?: TileSpec }>;
 }
 
 export interface Floor {
@@ -49,6 +84,8 @@ export interface Floor {
   items: Item[];
   /** Warnings the user chose to "let it be". */
   okWarnings?: string[];
+  /** Floor-to-floor height (to the floor above). Default: highest ceiling + slab. */
+  floorHeightMm?: number;
 }
 
 export type RoomKind = 'room' | 'hall' | 'bathroom' | 'kitchen' | 'balcony' | 'parking' | 'store';
@@ -112,6 +149,8 @@ export interface Item {
     flightWidthMm: number;
     turn: 'left' | 'right';
     upDir: 0 | 90 | 180 | 270;
+    /** Open underneath: the space under the stairs can be used (storage, a desk...). */
+    open?: boolean;
   };
 }
 

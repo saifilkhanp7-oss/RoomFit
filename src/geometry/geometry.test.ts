@@ -129,7 +129,9 @@ describe('warnings', () => {
     const r = room();
     const below = { ...makeFloor('G'), rooms: [r], items: [item({ type: 'stairs', label: 'Stairs', x: 1500, y: 1500, width: 1000, depth: 2500 })] };
     const above = { ...makeFloor('F'), rooms: [r], items: [item({ x: 1500, y: 1500, label: 'Bed' })] };
-    expect(warn(above, false, below).list.some((x) => x.message === 'Bed is on the stair opening')).toBe(true);
+    const w = warn(above, false, below).list.find((x) => x.id.startsWith('stairhole:'))!;
+    expect(w.level).toBe('yellow');
+    expect(w.message).toBe('Bed is over the stair opening from G: fine only if the floor is closed there');
   });
 
   it('height checks: ceiling, window and fan', () => {

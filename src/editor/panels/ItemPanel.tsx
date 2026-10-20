@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus } from 'lucide-react';
 import type { Item, Unit } from '../../model/types';
 import { LengthInput } from '../../components/LengthInput';
-import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow } from '../../model/catalog';
+import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow, itemDrop } from '../../model/catalog';
 import { normAngle } from '../../geometry/items';
-import { DEFAULT_CEILING, FAN_DROP } from '../../geometry/warnings';
+import { DEFAULT_CEILING } from '../../geometry/warnings';
 import { formatLength } from '../../model/units';
 import './panels.css';
 
@@ -62,10 +62,10 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
       {mount === 'ceiling' && (
         <LengthInput
           id="item-h"
-          label="Fan height from floor"
+          label={item.type === 'fan' ? 'Fan height from floor' : 'Bottom of it from floor'}
           unit={unit}
-          valueMm={item.heightMm ?? ceiling - FAN_DROP}
-          min={1500}
+          valueMm={item.heightMm ?? ceiling - itemDrop(item)}
+          min={1200}
           max={6000}
           onChange={(heightMm) => onChange({ heightMm })}
         />
@@ -179,7 +179,19 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
               </div>
             </>
           )}
-          <p className="hint" style={{ marginTop: -4 }}>The arrow shows the way up. The same space is kept free on the floor above.</p>
+          <div className="field">
+            <span className="field-label">Underneath</span>
+            <div className="segmented" role="group" aria-label="Under the stairs">
+              <button aria-pressed={!item.stairs?.open} onClick={() => onChange({ stairs: { ...defStairs(item), open: undefined } })}>
+                Closed
+              </button>
+              <button aria-pressed={!!item.stairs?.open} onClick={() => onChange({ stairs: { ...defStairs(item), open: true } })}>
+                Open (use the space)
+              </button>
+            </div>
+          </div>
+          {item.stairs?.open && <p className="hint" style={{ marginTop: -6 }}>Things can go under the stairs where they're low enough. The space is higher towards the top of the stairs.</p>}
+          <p className="hint" style={{ marginTop: -4 }}>The arrow shows the way up. The floor above gets a stair opening here; anything you put over it gets a warning you can let be.</p>
         </>
       )}
 

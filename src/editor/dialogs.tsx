@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Check, Copy, FileDown, Image as ImageIcon, Link2, Pencil, Plus, Trash2, Layers, Share2 } from 'lucide-react';
+import { Check, Copy, FileDown, Image as ImageIcon, Link2, MoveVertical, Pencil, Plus, Trash2, Layers, Share2 } from 'lucide-react';
+import { floorHeight, SLAB } from '../geometry/levels';
 import { Dialog, ConfirmDialog } from '../components/Dialog';
 import { LengthInput } from '../components/LengthInput';
 import { RenameDialog } from '../pages/HomeList';
@@ -400,8 +401,45 @@ export function LayoutsDialog(props: {
 }
 
 // ---------------- Floor menu ----------------
-export function FloorMenu(props: { floor: Floor; canDelete: boolean; onRename: (n: string) => void; onDelete: () => void; onClose: () => void }) {
-  const [mode, setMode] = useState<'menu' | 'rename' | 'delete'>('menu');
+export function FloorMenu(props: {
+  floor: Floor;
+  unit: Unit;
+  canDelete: boolean;
+  onRename: (n: string) => void;
+  onFloorHeight: (mm: number | undefined) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'menu' | 'rename' | 'delete' | 'height'>('menu');
+  const auto = floorHeight({ ...props.floor, floorHeightMm: undefined });
+  const [h, setH] = useState(props.floor.floorHeightMm ?? auto);
+  if (mode === 'height')
+    return (
+      <Dialog title="Floor height" subtitle="From this floor to the floor above, slab included. Used by the 3D view and the stairs." onClose={props.onClose}>
+        <LengthInput id="floor-height" label="Floor-to-floor height" unit={props.unit} valueMm={h} min={1800} max={12000} onChange={setH} />
+        <p className="hint">Automatic: {formatLength(auto, props.unit)} (highest ceiling + {formatSmall(SLAB, props.unit)} slab).</p>
+        <div className="stack-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              props.onFloorHeight(Math.abs(h - auto) < 2 ? undefined : h);
+              props.onClose();
+            }}
+          >
+            Save
+          </button>
+          <button
+            className="btn"
+            onClick={() => {
+              props.onFloorHeight(undefined);
+              props.onClose();
+            }}
+          >
+            Use automatic
+          </button>
+        </div>
+      </Dialog>
+    );
   if (mode === 'rename') return <RenameDialog title="Rename floor" initial={props.floor.name} onSave={props.onRename} onClose={props.onClose} />;
   if (mode === 'delete')
     return (
@@ -419,6 +457,9 @@ export function FloorMenu(props: { floor: Floor; canDelete: boolean; onRename: (
       <div className="action-list">
         <button className="action-item" onClick={() => setMode('rename')}>
           <Pencil size={18} /> Rename floor
+        </button>
+        <button className="action-item" onClick={() => setMode('height')}>
+          <MoveVertical size={18} /> Floor height ({formatLength(props.floor.floorHeightMm ?? auto, props.unit)})
         </button>
         {props.canDelete && (
           <button className="action-item danger" onClick={() => setMode('delete')}>

@@ -1,9 +1,11 @@
+import { floorHeight } from '../geometry/levels';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle, ArrowLeft, Box, ChevronDown, Copy, DoorOpen, Grid3x3, Image as ImageIcon, Layers, Maximize, Minus,
   MoreHorizontal, Pencil, Plus, Redo2, RotateCcw, RotateCw, Ruler, Settings as SettingsIcon, Share2, Sofa, SquarePlus,
-  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine,
+  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine, Calculator,
 } from 'lucide-react';
+import { EstimateDialog } from '../editor/EstimateDialog';
 import { canRedo, canUndo, findHome, useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -42,7 +44,7 @@ import './Editor.css';
 const View3D = lazy(() => import('../three/View3D'));
 
 type Mode = 'select' | 'measure' | 'door' | 'window';
-type Sheet = null | 'hall' | 'makeMulti' | 'addFloorMenu' | 'account' | 'add' | 'props' | 'warnings' | 'rooms' | 'addRoom' | 'custom' | 'layouts' | 'share' | 'export' | 'more' | 'settings' | 'floorMenu' | 'deleteRoom';
+type Sheet = null | 'hall' | 'makeMulti' | 'addFloorMenu' | 'account' | 'add' | 'props' | 'warnings' | 'rooms' | 'addRoom' | 'custom' | 'layouts' | 'share' | 'export' | 'more' | 'settings' | 'floorMenu' | 'deleteRoom' | 'estimate';
 
 // Carry zoom + floor over when switching layouts, so "Layout A" vs "Layout B" compare at the same spot.
 const carry: { view?: LayoutView; floorIndex?: number } = {};
@@ -61,7 +63,7 @@ export function Editor({ homeId, layoutId, show3d }: { homeId: string; layoutId:
       </div>
     );
   }
-  return <EditorInner key={layout.id} homeId={homeId} layoutId={layoutId} show3d={show3d && home.kind === 'single'} />;
+  return <EditorInner key={layout.id} homeId={homeId} layoutId={layoutId} show3d={show3d} />;
 }
 
 const distToPoly = (p: Pt, poly: Poly) => {
@@ -84,7 +86,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const toast = useToast((s) => s.show);
   const unit = settings.unit;
   const multi = home.kind === 'multi';
-  const heights = !multi;
+  const heights = true;
 
   // ---------- floor ----------
   const [floorId, setFloorId] = useState(() => {
@@ -127,9 +129,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const sel: Selection = selItem || selOpening || selRoom ? selection : null;
 
   const warnings = useMemo(
-    () => computeWarnings(floor, { floorBelow, settings, unit, heights }),
+    () => computeWarnings(floor, { floorBelow, settings, unit, heights, stairRiseMm: floorIndex < layout.floors.length - 1 ? floorHeight(floor) : undefined }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [floor, floorBelow, settings.minWalkMm, settings.fanClearanceMm, unit, heights],
+    [floor, floorBelow, settings.minWalkMm, settings.fanClearanceMm, unit, heights, floorIndex, layout.floors.length],
   );
   const redCount = warnings.list.filter((w) => w.level === 'red').length;
 
@@ -721,7 +723,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               m
             </button>
           </div>
-          {!multi && (
+          {(
             <button className="btn btn-ghost top-btn" onClick={() => {
                 setSheet(null);
                 navigate(`/edit/${homeId}/${layoutId}/3d`);
@@ -729,6 +731,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               <Box size={18} /> 3D
             </button>
           )}
+          <button className="btn btn-ghost top-btn" onClick={() => setSheet('estimate')}>
+            <Calculator size={18} /> Cost
+          </button>
           <button className="btn btn-ghost top-btn" onClick={() => setSheet('share')}>
             <Share2 size={18} /> Share
           </button>
@@ -1072,7 +1077,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
         />
       )}
       {sheet === 'makeMulti' && (
-        <Dialog title="Add a floor or basement" subtitle="This home becomes a multi-floor home with floor tabs. The 3D view is only for single-floor homes." onClose={() => setSheet(null)}>
+        <Dialog title="Add a floor or basement" subtitle="This home becomes a multi-floor home with floor tabs. The 3D view shows all floors stacked." onClose={() => setSheet(null)}>
           <div className="stack-actions">
             <button
               className="btn btn-primary"
@@ -1159,8 +1164,10 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       {sheet === 'floorMenu' && (
         <FloorMenu
           floor={floor}
+          unit={unit}
           canDelete={layout.floors.length > 1}
           onRename={(n) => S.editLayout(homeId, layoutId, (l) => ops.renameFloor(l, floor.id, n))}
+          onFloorHeight={(mm) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f) => (f.id === floor.id ? { ...f, floorHeightMm: mm } : f)) }))}
           onDelete={() => {
             const next = layout.floors[floorIndex > 0 ? floorIndex - 1 : 1];
             S.editLayout(homeId, layoutId, (l) => ops.deleteFloor(l, floor.id));
@@ -1182,6 +1189,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       )}
       {sheet === 'export' && <ExportDialog home={home} layout={layout} floorId={floor.id} unit={unit} showDims={settings.showDims} onClose={() => setSheet(null)} />}
       {sheet === 'settings' && <SettingsDialog onClose={() => setSheet(null)} />}
+      {sheet === 'estimate' && (
+        <EstimateDialog layout={layout} unit={unit} multi={multi} onChange={(estimate) => S.editLayout(homeId, layoutId, (l) => ({ ...l, estimate }))} onClose={() => setSheet(null)} />
+      )}
       {sheet === 'account' && <AccountDialog onClose={() => setSheet(null)} />}
       {sheet === 'more' && (
         <Dialog title="More" onClose={() => setSheet(null)}>
@@ -1200,6 +1210,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             <button className="action-item" onClick={() => setSheet('share')}>
               <Share2 size={18} /> Share link
             </button>
+            <button className="action-item" onClick={() => setSheet('estimate')}>
+              <Calculator size={18} /> Bricks & tiles cost
+            </button>
             <button className="action-item" onClick={() => setSheet('export')}>
               <ImageIcon size={18} /> Save as image (PNG)
             </button>
@@ -1212,7 +1225,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             >
               <FileDown size={18} /> Download backup of this home
             </button>
-            {!multi && (
+            {(
               <button className="action-item" onClick={() => {
                 setSheet(null);
                 navigate(`/edit/${homeId}/${layoutId}/3d`);
@@ -1252,7 +1265,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
 
       {show3d && (
         <Suspense fallback={<div className="three-loading">Loading 3D…</div>}>
-          <View3D floor={floor} homeName={home.name} layoutName={layout.name} unit={unit} warnings={warnings} onClose={() => navigate(`/edit/${homeId}/${layoutId}`, true)} />
+          <View3D floors={layout.floors} startIndex={floorIndex} multi={multi} homeName={home.name} layoutName={layout.name} unit={unit} settings={settings} onClose={() => navigate(`/edit/${homeId}/${layoutId}`, true)} />
         </Suspense>
       )}
     </div>

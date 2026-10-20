@@ -1,5 +1,6 @@
+import { stairBlocksWorld } from './stairs';
 import type { Floor, Item, Room, Settings, Unit } from '../model/types';
-import { catalogEntry, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemSpan } from '../model/catalog';
+import { catalogEntry, isStairs, isWallFixed, itemDrop, itemElevation, itemHeight, itemMount, itemSpan } from '../model/catalog';
 import { formatLength } from '../model/units';
 import { itemPoly } from './items';
 import { polyBox, polyGap, polysIntersect, boxesOverlap, type Poly, type Pt } from './poly';
@@ -48,7 +49,9 @@ export interface WarningOptions {
   floorBelow?: Floor;
   settings: Pick<Settings, 'minWalkMm' | 'fanClearanceMm'>;
   unit: Unit;
-  /** Height checks (taller than ceiling, window, fan) – single-floor homes only. */
+  /** Height of the stairs on this floor (to the floor above). Default: the ceiling. */
+  stairRiseMm?: number;
+  /** Height checks (taller than ceiling, window, fan, lamp). */
   heights: boolean;
 }
 
@@ -103,6 +106,18 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
       const id = `overlap:${a.id}:${b.id}`;
       if (stair) {
         const other = stair === a ? b : a;
+        if (stair.stairs?.open && !isStairs(other)) {
+          // open stairs: things can go under them if they're low enough where they stand
+          const room = roomOfPoint(floor, stair);
+          const rise = opts.stairRiseMm ?? room?.ceilingMm ?? DEFAULT_CEILING;
+          const op = polys.get(other.id)!;
+          const over = stairBlocksWorld(stair, rise).filter((s) => polysIntersect(s.poly, op));
+          const space = over.length ? Math.min(...over.map((s) => s.bottom)) : rise;
+          const span = itemSpan(other);
+          if (span.top <= space + STACK_TOL) continue;
+          add({ id, level: 'red', message: `${other.label} (${fmt(span.top)} high) doesn't fit under the stairs there (${fmt(space)} space)`, itemIds: [a.id, b.id] });
+          continue;
+        }
         add({ id, level: 'red', message: `${other.label} is on the stairs`, itemIds: [a.id, b.id] });
         continue;
       }
@@ -167,13 +182,18 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
     });
   }
 
-  // 3. On a stair opening from the floor below
+  // 3. Over the stair opening from the floor below. Whether that's fine depends on the design
+  // (stairs going on up, a landing, a closed-over part), so it's a yellow warning the user can let be.
+  // Lamps and fans hang from the ceiling, so they're always fine over the stairs.
+  const below = opts.floorBelow?.name ?? 'the floor below';
   for (const so of stairOpenings(opts.floorBelow)) {
     for (const it of items) {
       if (itemMount(it) === 'ceiling') continue;
-      if (polysIntersect(polys.get(it.id)!, so.poly)) {
-        add({ id: `stairhole:${it.id}:${so.item.id}`, level: 'red', message: `${it.label} is on the stair opening`, itemIds: [it.id] });
-      }
+      if (!polysIntersect(polys.get(it.id)!, so.poly)) continue;
+      const message = isStairs(it)
+        ? `${it.label} over the stair opening from ${below}: fine if the stairs go on up, check the head room`
+        : `${it.label} is over the stair opening from ${below}: fine only if the floor is closed there`;
+      add({ id: `stairhole:${it.id}:${so.item.id}`, level: 'yellow', message, itemIds: [it.id] });
     }
   }
 
@@ -283,13 +303,15 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
       }
 
       if (mount === 'ceiling') {
-        const fanH = it.heightMm ?? ceiling - FAN_DROP;
+        const fanH = it.heightMm ?? ceiling - itemDrop(it);
+        // fans need clearance for the blades; lamps only must not touch anything
+        const need = it.type === 'fan' ? opts.settings.fanClearanceMm : 1;
         for (const other of items) {
-          if (other.id === it.id || itemMount(other) !== 'floor') continue;
+          if (other.id === it.id || itemMount(other) !== 'floor' || isStairs(other)) continue;
           if (itemHeight(other) === undefined) continue;
           if (!polysIntersect(polys.get(other.id)!, polys.get(it.id)!)) continue;
           const gap = fanH - itemSpan(other).top;
-          if (gap < opts.settings.fanClearanceMm) {
+          if (gap < need) {
             add({
               id: `fan:${it.id}:${other.id}`,
               level: gap <= 0 ? 'red' : 'yellow',

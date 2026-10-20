@@ -605,8 +605,27 @@ export function drawItem(c: CanvasRenderingContext2D, it: Item, z: number, K: Pa
     c.lineWidth = px(red || yellow ? 3 : 1.5);
     c.stroke();
     c.setLineDash([]);
-    // fan blades
-    c.beginPath();
+    if (it.type !== 'fan') {
+      // lamp: a bulb with short rays
+      const rr = Math.min(w, d) * 0.22;
+      c.beginPath();
+      c.arc(0, 0, rr, 0, Math.PI * 2);
+      c.fillStyle = withAlpha(base, 0.9);
+      c.fill();
+      c.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        c.moveTo(Math.cos(a) * rr * 1.4, Math.sin(a) * rr * 1.4);
+        c.lineTo(Math.cos(a) * rr * 2, Math.sin(a) * rr * 2);
+      }
+      c.lineWidth = px(2);
+      c.strokeStyle = shade(base, -0.25);
+      c.lineCap = 'round';
+      c.stroke();
+      c.lineCap = 'butt';
+    } else {
+      // fan blades
+      c.beginPath();
     for (let i = 0; i < 3; i++) {
       const a = (i * Math.PI * 2) / 3 - Math.PI / 2;
       c.moveTo(0, 0);
@@ -621,6 +640,7 @@ export function drawItem(c: CanvasRenderingContext2D, it: Item, z: number, K: Pa
     c.arc(0, 0, Math.min(w, d) * 0.07, 0, Math.PI * 2);
     c.fillStyle = shade(base, -0.3);
     c.fill();
+    }
   } else {
     c.fillStyle = fill;
     c.fill();

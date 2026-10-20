@@ -1,3 +1,4 @@
+import { sanitizeEstimate } from '../geometry/estimate';
 // Checks plans coming from outside (share links, backup files) and rebuilds them
 // with only known fields, so a broken or edited file can't break the app.
 import type { Floor, Home, Item, ItemTemplate, Layout, Opening, Room, Side } from '../model/types';
@@ -69,6 +70,7 @@ function item(i: any): Item | null {
       flightWidthMm: num(i.stairs.flightWidthMm, 900, 300, 5000),
       turn: oneOf(i.stairs.turn, ['left', 'right'] as const, 'right'),
       upDir: 0,
+      ...(i.stairs.open === true ? { open: true } : {}),
     };
   }
   return it;
@@ -83,6 +85,7 @@ function floor(f: any, index: number): Floor | null {
     name: str(f.name, `Floor ${index + 1}`, 40),
     outerWallMm: num(f.outerWallMm, 229, 0, 2000),
     innerWallMm: optNum(f.innerWallMm, 0, 2000),
+    floorHeightMm: optNum(f.floorHeightMm, 1800, 12000),
     rooms,
     sharedWalls: [],
     openings: (Array.isArray(f.openings) ? f.openings : []).map((o: any) => opening(o, ids)).filter(Boolean) as Opening[],
@@ -97,7 +100,8 @@ function layout(l: any): Layout | null {
   if (!isObj(l) || !Array.isArray(l.floors)) return null;
   const floors = l.floors.map(floor).filter(Boolean).slice(0, 10) as Floor[];
   if (!floors.length) return null;
-  return { id: str(l.id, newId(), 40), name: str(l.name, 'Layout A', 40), floors };
+  const estimate = sanitizeEstimate(l.estimate);
+  return { id: str(l.id, newId(), 40), name: str(l.name, 'Layout A', 40), floors, ...(estimate ? { estimate } : {}) };
 }
 
 export function sanitizeHome(h: any): Home | null {

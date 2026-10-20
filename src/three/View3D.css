@@ -124,3 +124,36 @@
     bottom: calc(12px + var(--safe-bottom));
   }
 }
+.view3d-floors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px calc(10px + var(--safe-right)) 8px calc(10px + var(--safe-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.view3d-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.view3d-chips::-webkit-scrollbar {
+  display: none;
+}
+.view3d-chips .chip {
+  flex: none;
+}
+.view3d-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.view3d-gap input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}

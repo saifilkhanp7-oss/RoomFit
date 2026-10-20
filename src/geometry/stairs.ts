@@ -1,5 +1,6 @@
 import type { Item } from '../model/types';
 import type { Pt } from './poly';
+import { rotatePt } from './poly';
 
 const STEP = 260; // typical tread depth in mm
 
@@ -97,4 +98,82 @@ export function stairDrawing(item: Item): StairDrawing {
       { x: R - f / 2, y: B - 120 },
     ].map(mx),
   };
+}
+
+/** One solid step for 3D, in the item's local space (before rotation). */
+export interface StepBlock {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  top: number; // height of the tread
+  bottom: number; // 0 for closed stairs; the underside for open ones
+}
+
+/** Open stairs: each step is a slab this thick (tread + the sloping part under it). */
+export const OPEN_STAIR_THICK = 250;
+
+/**
+ * Steps for the 3D view, rising from 0 to `rise` (the floor above).
+ * Same layout as the 2D drawing: going up towards local -y; landings count as one step.
+ */
+export function stairBlocks(item: Item, rise: number): StepBlock[] {
+  const w = item.width;
+  const d = item.depth;
+  const L = -w / 2,
+    R = w / 2,
+    T = -d / 2,
+    B = d / 2;
+  const style = item.stairs?.style ?? 'straight';
+  const f = Math.min(item.stairs?.flightWidthMm ?? Math.min(w, 1000), w / (style === 'U' ? 2 : 1), d);
+  const mirror = (item.stairs?.turn ?? 'right') === 'left';
+  const count = (len: number) => Math.max(1, Math.round(len / STEP));
+
+  // each run: a list of rectangles in walking order
+  const runY = (x0: number, x1: number, from: number, to: number) => {
+    const n = count(Math.abs(to - from));
+    return Array.from({ length: n }, (_, i) => {
+      const a = from + ((to - from) * i) / n;
+      const b = from + ((to - from) * (i + 1)) / n;
+      return { x0, x1, y0: Math.min(a, b), y1: Math.max(a, b) };
+    });
+  };
+  const runX = (y0: number, y1: number, from: number, to: number) => {
+    const n = count(Math.abs(to - from));
+    return Array.from({ length: n }, (_, i) => {
+      const a = from + ((to - from) * i) / n;
+      const b = from + ((to - from) * (i + 1)) / n;
+      return { y0, y1, x0: Math.min(a, b), x1: Math.max(a, b) };
+    });
+  };
+
+  let rects: { x0: number; y0: number; x1: number; y1: number }[];
+  if (style === 'straight') rects = runY(L, R, B, T);
+  else if (style === 'L') rects = [...runY(L, L + f, B, T + f), { x0: L, x1: L + f, y0: T, y1: T + f }, ...runX(T, T + f, L + f, R)];
+  else rects = [...runY(L, L + f, B, T + f), { x0: L, x1: R, y0: T, y1: T + f }, ...runY(R - f, R, T + f, B)];
+
+  const n = rects.length;
+  return rects.map((r, i) => {
+    const x0 = mirror ? -r.x1 : r.x0;
+    const x1 = mirror ? -r.x0 : r.x1;
+    const top = (rise * (i + 1)) / n;
+    return { x0, x1, y0: r.y0, y1: r.y1, top, bottom: item.stairs?.open ? Math.max(0, top - OPEN_STAIR_THICK) : 0 };
+  });
+}
+
+/** Steps on the plan (world mm), each with its underside height. */
+export function stairBlocksWorld(item: Item, rise: number): { poly: Pt[]; top: number; bottom: number }[] {
+  return stairBlocks(item, rise).map((b) => ({
+    top: b.top,
+    bottom: b.bottom,
+    poly: [
+      { x: b.x0, y: b.y0 },
+      { x: b.x1, y: b.y0 },
+      { x: b.x1, y: b.y1 },
+      { x: b.x0, y: b.y1 },
+    ].map((p) => {
+      const r = rotatePt(p, item.rotation);
+      return { x: r.x + item.x, y: r.y + item.y };
+    }),
+  }));
 }

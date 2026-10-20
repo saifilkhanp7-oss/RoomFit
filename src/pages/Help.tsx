@@ -96,16 +96,47 @@ export function Help() {
           </ul>
         </section>
         <section>
+          <h2>Bricks & tiles cost</h2>
+          <ul>
+            <li>
+              ⋯ More → <strong>Bricks & tiles cost</strong> (or <strong>Cost</strong> at the top on a laptop/iPad).
+            </li>
+            <li>
+              <strong>Bricks:</strong> enter the size of one brick, the gap between bricks (mortar) and the price of one brick. RoomFit works out the bricks for the walls (up to each room's ceiling height,
+              without doors and windows), the stairs and the ceiling. Untick what you don't want counted.
+            </li>
+            <li>
+              <strong>Tiles:</strong> enter the tile size and price for all rooms. Any room can have its <strong>own tile</strong> or <strong>no tiles</strong> (e.g. parking). "Same tile everywhere" puts them all back.
+            </li>
+            <li>Everything is saved with the layout, and you can change it any time. Prices are examples until you change them.</li>
+          </ul>
+        </section>
+        <section>
           <h2>Houses with more floors</h2>
           <ul>
             <li>Use the floor tabs at the top. Tap the current tab to rename or delete it, and + to add a floor.</li>
             <li>Add <strong>Stairs</strong> from the Structure section. The same space shows as a stair opening on the floor above.</li>
+            <li>
+              You can put anything over a stair opening: more stairs going up, a landing, or furniture where the floor is closed. You get a yellow warning so you can check it, and{' '}
+              <strong>Let it be</strong> if it's how your home is built. Hanging lamps and fans over the stairs never give a warning.
+            </li>
+            <li>
+              Stairs can be <strong>open underneath</strong> (in the stairs settings) so you can use the space below, e.g. a shelf or storage. Things fit where the stairs are high enough; you get a warning
+              if something is too tall there.
+            </li>
+            <li>
+              Tap the current floor tab → <strong>Floor height</strong> to set the height from this floor to the next (slab included). By default it's the highest ceiling + 6″.
+            </li>
           </ul>
         </section>
         <section>
-          <h2>3D view (single floor)</h2>
+          <h2>3D view</h2>
           <ul>
             <li>Set the ceiling height in the room settings and the height of furniture to check tall things. Typical heights are used if you don't.</li>
+            <li>
+              Homes with more floors: pick <strong>All floors</strong> to see them stacked, or one floor on its own. Drag <strong>Space between floors</strong> to pull them apart and look inside. Stairs are shown as real
+              steps going up through the opening.
+            </li>
             <li>In 3D: one finger turns, pinch zooms, two fingers move. "Cut walls" lowers the walls so you can see inside.</li>
           </ul>
         </section>

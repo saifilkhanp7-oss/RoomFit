@@ -1,3 +1,4 @@
+import { isBasementName } from '../geometry/levels';
 // Pure edit operations on a floor or layout. The store wraps these with undo history.
 import type { Floor, Item, Layout, Opening, Room, RoomKind, Side } from './types';
 import { cloneLayoutFresh, floorName, id, makeFloor, makeRoom } from './defaults';
@@ -174,7 +175,7 @@ export function setSharedWall(f: Floor, roomId: string, neighborId: string, side
 
 // ---------- floors & layouts ----------
 
-const isBasement = (name: string) => /basement|underground|parking level/i.test(name);
+const isBasement = isBasementName;
 
 /** New floor on top, with the same room outlines as the floor below (no furniture). */
 export function addFloor(l: Layout): { layout: Layout; floorId: string } {

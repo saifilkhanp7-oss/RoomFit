@@ -22,6 +22,8 @@ export interface CatalogEntry {
   openBelowMm?: number;
   /** Usually fixed to the wall (can hang off the floor). */
   wallFixed?: boolean;
+  /** Ceiling things: how far the bottom hangs below the ceiling. */
+  dropMm?: number;
   /** Don't give walking-space warnings for this item (chairs sit close to tables etc). */
   noClearance?: boolean;
   multiOnly?: boolean;
@@ -66,6 +68,7 @@ export const CATALOG: CatalogEntry[] = [
   { type: 'mirror', label: 'Mirror', category: 'Other', width: fi(2), depth: fi(0, 4), heightMm: fi(5), shape: 'rect', color: '#bfe0f2', wallItem: true, noClearance: true, wallFixed: true },
   { type: 'dustbin', label: 'Dustbin', category: 'Other', width: fi(1), depth: fi(1), heightMm: fi(1, 6), shape: 'round', color: '#7d8a8f', noClearance: true },
   { type: 'fan', label: 'Ceiling fan', category: 'Other', width: fi(4), depth: fi(4), shape: 'round', color: '#9aa0a6', mount: 'ceiling', noClearance: true },
+  { type: 'lamp', label: 'Hanging lamp', category: 'Other', width: fi(1, 4), depth: fi(1, 4), shape: 'round', color: '#f2c94c', mount: 'ceiling', noClearance: true, dropMm: fi(2) },
   { type: 'rug', label: 'Rug', category: 'Other', width: fi(5), depth: fi(3), shape: 'rect', color: '#d9b8c4', mount: 'under', noClearance: true },
   // Vehicles (top view, front of the vehicle = top edge)
   { type: 'car-hatch', label: 'Car (hatchback)', category: 'Vehicles', width: 1700, depth: 3800, heightMm: 1520, shape: 'rect', color: '#d98080' },
@@ -120,6 +123,11 @@ export function itemSpan(item: Item): { bottom: number; top: number; solidBottom
   const bottom = itemElevation(item);
   const h = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
   return { bottom, top: bottom + h, solidBottom: bottom + itemOpenBelow(item) };
+}
+
+/** How far a ceiling thing (fan, lamp) hangs below the ceiling. */
+export function itemDrop(item: Item): number {
+  return catalogEntry(item.type)?.dropMm ?? 305;
 }
 
 export function isWallFixed(item: Item): boolean {

@@ -1,0 +1,126 @@
+.est {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.est-top {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.est-top .segmented:first-child {
+  flex: 1;
+  min-width: 170px;
+}
+.est-cur button {
+  min-width: 36px;
+}
+.est-h {
+  margin: 6px 0 -2px;
+  font-size: 14px;
+  color: var(--text-2);
+  font-weight: 650;
+}
+.est .row .field {
+  min-width: 0;
+}
+.est-result {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface-2, var(--bg));
+}
+.est-result table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.est-result td {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.est-result td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.est .muted {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.est-result td.muted {
+  text-align: right;
+  padding-right: 10px;
+}
+.est-total,
+.est-room-sum,
+.est-grand {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.est-total {
+  padding-top: 8px;
+  font-size: 14px;
+}
+.est-total strong {
+  font-size: 18px;
+}
+.est-grand {
+  position: sticky;
+  bottom: 0;
+  margin: 4px -4px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.est-grand strong {
+  font-size: 20px;
+  color: var(--accent);
+}
+.est-rooms-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.est-rooms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.est-room {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.est-room-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.est-room-sum {
+  font-size: 14px;
+}
+.segmented.small button {
+  font-size: 13px;
+  min-height: 34px;
+}
+.est-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
