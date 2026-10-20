@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2, PackageOpen } from 'lucide-react';
 import { CATALOG, CATEGORIES, type CatalogEntry } from '../../model/catalog';
 import type { ItemTemplate, Unit } from '../../model/types';
 import { formatLength } from '../../model/units';
@@ -16,9 +16,10 @@ interface Props {
   onDrop?: (p: Pickable, clientX: number, clientY: number) => void;
   onCustom: () => void;
   onDeleteTemplate: (id: string) => void;
+  onMyThings?: () => void;
 }
 
-export function FurniturePanel({ multi, unit, templates, onPick, onDrop, onCustom, onDeleteTemplate }: Props) {
+export function FurniturePanel({ multi, unit, templates, onPick, onDrop, onCustom, onDeleteTemplate, onMyThings }: Props) {
   const [q, setQ] = useState('');
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -44,10 +45,15 @@ export function FurniturePanel({ multi, unit, templates, onPick, onDrop, onCusto
       <button className="btn btn-block custom-btn" onClick={onCustom}>
         <Plus size={18} /> Custom item
       </button>
+      {onMyThings && (
+        <button className="btn btn-block btn-ghost" onClick={onMyThings}>
+          <PackageOpen size={18} /> My things (for any home)
+        </button>
+      )}
 
       {myItems.length > 0 && (
         <section>
-          <h4>My items</h4>
+          <h4>My things</h4>
           <div className="tile-grid">
             {myItems.map((t) => (
               <Tile
@@ -174,7 +180,7 @@ function Tile(props: {
         </span>
       </button>
       {props.onDelete && (
-        <button className="icon-btn tile-del" aria-label={`Remove ${props.label} from My items`} onClick={props.onDelete}>
+        <button className="icon-btn tile-del" aria-label={`Remove ${props.label} from My things`} onClick={props.onDelete}>
           <Trash2 size={15} />
         </button>
       )}

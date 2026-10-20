@@ -10,6 +10,7 @@ import { computeWarnings, roomOfPoint, stairOpenings, type WarningOptions, type 
 import { clipToRect, floorHeight, floorLevels, groundIndex, roomCeiling, SLAB } from '../geometry/levels';
 import { stairBlocks } from '../geometry/stairs';
 import { buildWalls } from '../geometry/wallPieces';
+import { partitionAngle, partitionLength, partitionMid, partitionSpan } from '../geometry/partitions';
 import { roomOuterBox } from '../geometry/walls';
 import { byDepth, depthOf, kindOf } from '../geometry/spaces';
 import { floorBounds } from '../geometry/view';
@@ -291,6 +292,19 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade }: {
           {w.glass ? <meshStandardMaterial color="#8ec5ff" transparent opacity={0.35} /> : <meshStandardMaterial color={dark ? '#c9ced6' : '#fafafa'} roughness={0.95} />}
         </mesh>
       ))}
+      {(floor.partitions ?? []).map((pw) => {
+        const { bottom, top } = partitionSpan(floor, pw);
+        const len = partitionLength(pw);
+        const m = partitionMid(pw);
+        const h = cut && pw.bottomMm <= 0 ? Math.min(top, 1000) - bottom : top - bottom;
+        if (h <= 1 || len < 1) return null;
+        return (
+          <mesh key={pw.id} position={[m.x * M, (bottom + h / 2) * M, m.y * M]} rotation={[0, -partitionAngle(pw), 0]}>
+            <boxGeometry args={[len * M, h * M, pw.thicknessMm * M]} />
+            <meshStandardMaterial color={dark ? '#b9bec6' : '#f2f2f2'} roughness={0.95} />
+          </mesh>
+        );
+      })}
       {floor.items.map((it) => {
         const room = roomOfPoint(floor, it);
         return (

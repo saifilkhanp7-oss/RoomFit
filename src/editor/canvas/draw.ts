@@ -1,6 +1,7 @@
+import { PARTITION_DEFAULT, partitionAngle, partitionHeightText, partitionLength, partitionMid, partitionPoly, partitionSpan } from '../../geometry/partitions';
 // Draws the whole plan with the plain Canvas 2D API.
 // Used by the editor canvas, the shared-plan viewer and PNG export.
-import type { Floor, Item, LayoutView, Unit } from '../../model/types';
+import type { Floor, Item, LayoutView, Partition, Person, Unit } from '../../model/types';
 import { formatLength, gridSteps } from '../../model/units';
 import { isStairs, itemElevation, itemMount, itemOpenBelow } from '../../model/catalog';
 import { childBlocks, doorSwings, openingGeom, roomOuterBox, sharedWallBoxes } from '../../geometry/walls';
@@ -71,7 +72,13 @@ export const PALETTES: Record<'light' | 'dark', Palette> = {
   },
 };
 
-export type Selection = { kind: 'item' | 'room' | 'opening'; id: string } | null;
+export type Selection = { kind: 'item' | 'room' | 'opening' | 'partition' | 'zone'; id: string } | null;
+
+/** Result of "Will it get in?": ghost outlines along the way. */
+export interface RouteDrawing {
+  ok: boolean;
+  steps: Pt[][];
+}
 
 export interface Measurement {
   a: Pt;
@@ -94,6 +101,10 @@ export interface DrawState {
   measurements?: Measurement[];
   measureDraft?: { a: Pt; b?: Pt } | null;
   guides?: Guide[];
+  wallDraft?: { a: Pt; b?: Pt } | null;
+  zoneDraft?: { a: Pt; b?: Pt; color: string } | null;
+  people?: Person[];
+  route?: RouteDrawing | null;
   /** No selection handles or warning colours (PNG export) */
   clean?: boolean;
 }
@@ -211,6 +222,26 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     c.fillStyle = K.wall;
     for (const b of shared) c.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
     for (const r of here) drawRoomFloor(c, r, K, z);
+  }
+
+  // ---------- roommates' spaces ----------
+  for (const zn of floor.zones ?? []) {
+    const who = s.people?.find((p) => p.id === zn.personId);
+    const col = who?.color ?? '#888888';
+    c.fillStyle = withAlpha(col, 0.13);
+    c.fillRect(zn.x, zn.y, zn.width, zn.length);
+    c.setLineDash([px(7), px(4)]);
+    c.strokeStyle = withAlpha(col, 0.85);
+    c.lineWidth = px(2);
+    c.strokeRect(zn.x, zn.y, zn.width, zn.length);
+    c.setLineDash([]);
+    if (zn.width * z > 50) {
+      c.font = `700 ${px(11.5)}px ${FONT}`;
+      c.textAlign = 'left';
+      c.textBaseline = 'top';
+      c.fillStyle = shade(col, -0.25);
+      c.fillText(`${who?.name ?? 'Someone'}'s space`, zn.x + px(6), zn.y + px(5));
+    }
   }
 
   // ---------- stair openings from the floor below ----------
@@ -337,6 +368,10 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     }
   }
 
+  // ---------- inner walls standing on the floor ----------
+  const pws = floor.partitions ?? [];
+  for (const pw of pws) if (pw.bottomMm <= 0) drawPartition(c, floor, pw, z, K, s.unit);
+
   // ---------- items: rugs under, then furniture, then ceiling items ----------
   const order = { under: 0, floor: 1, ceiling: 2 } as const;
   // lower things first, so a suitcase on a cupboard is drawn on top of it
@@ -358,6 +393,27 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
       if (Math.min(it.width, it.depth) * z > 14) badge(c, `↑ ${formatLength(e, s.unit)}`, tr.x, tr.y, z, K);
     } else drawItem(c, it, z, K, red, yellow);
   }
+
+  // ---------- owners: a coloured dot on each roommate's things ----------
+  if (s.people?.length) {
+    for (const it of floor.items) {
+      const who = it.owner && s.people.find((p) => p.id === it.owner);
+      if (!who) continue;
+      const top = itemPoly({ ...it, shape: 'rect' });
+      const tl = top.reduce((m, q) => (q.x + q.y < m.x + m.y ? q : m), top[0]);
+      const r = Math.max(px(5), Math.min(px(8), Math.min(it.width, it.depth) * 0.12));
+      c.beginPath();
+      c.arc(tl.x + r * 1.6, tl.y + r * 1.6, r, 0, Math.PI * 2);
+      c.fillStyle = who.color;
+      c.fill();
+      c.lineWidth = px(1.5);
+      c.strokeStyle = K.roomFill;
+      c.stroke();
+    }
+  }
+
+  // ---------- inner walls higher up (above a cupboard, a bulkhead): drawn over the furniture ----------
+  for (const pw of pws) if (pw.bottomMm > 0) drawPartition(c, floor, pw, z, K, s.unit);
 
   // ---------- room labels & sizes ----------
   const holes = stairOpenings(s.floorBelow).map((so) => so.item);
@@ -435,6 +491,39 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
         c.strokeRect(r.x, r.y, r.width, r.length);
         c.setLineDash([]);
       }
+    } else if (sel.kind === 'partition') {
+      const pw = pws.find((x) => x.id === sel.id);
+      if (pw) {
+        pathPoly(c, partitionPoly(pw));
+        c.strokeStyle = K.select;
+        c.lineWidth = px(2.5);
+        c.stroke();
+        const len = partitionLength(pw);
+        const nx = (-(pw.b.y - pw.a.y) / (len || 1)) * (pw.thicknessMm / 2 + px(16));
+        const ny = ((pw.b.x - pw.a.x) / (len || 1)) * (pw.thicknessMm / 2 + px(16));
+        dimLine(c, { x: pw.a.x + nx, y: pw.a.y + ny }, { x: pw.b.x + nx, y: pw.b.y + ny }, formatLength(len, s.unit), z, K.select, K.roomFill);
+        for (const e of [pw.a, pw.b]) {
+          c.beginPath();
+          c.arc(e.x, e.y, px(8), 0, Math.PI * 2);
+          c.fillStyle = K.roomFill;
+          c.fill();
+          c.lineWidth = px(2.5);
+          c.strokeStyle = K.select;
+          c.stroke();
+        }
+      }
+    } else if (sel.kind === 'zone') {
+      const zn = floor.zones?.find((x) => x.id === sel.id);
+      if (zn) {
+        c.strokeStyle = K.select;
+        c.lineWidth = px(2.5);
+        c.strokeRect(zn.x, zn.y, zn.width, zn.length);
+        c.beginPath();
+        c.arc(zn.x + zn.width, zn.y + zn.length, px(8), 0, Math.PI * 2);
+        c.fillStyle = K.roomFill;
+        c.fill();
+        c.stroke();
+      }
     } else if (sel.kind === 'item') {
       const it = floor.items.find((x) => x.id === sel.id);
       if (it) {
@@ -485,6 +574,48 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     c.setLineDash([]);
   }
 
+  // ---------- "Will it get in?" route ----------
+  if (s.route) {
+    const col = s.route.ok ? K.measure : K.red;
+    s.route.steps.forEach((poly, i) => {
+      const last = i === s.route!.steps.length - 1;
+      pathPoly(c, poly);
+      c.fillStyle = withAlpha(col, last ? 0.25 : 0.05);
+      c.fill();
+      c.strokeStyle = withAlpha(col, last ? 1 : 0.45);
+      c.lineWidth = px(last ? 2.5 : 1.2);
+      if (!last) c.setLineDash([px(4), px(3)]);
+      c.stroke();
+      c.setLineDash([]);
+    });
+  }
+
+  // ---------- drafts: new inner wall, new space ----------
+  if (s.wallDraft) {
+    const { a, b } = s.wallDraft;
+    if (b) {
+      pathPoly(c, partitionPoly({ id: 'draft', a, b, thicknessMm: PARTITION_DEFAULT, bottomMm: 0 }));
+      c.fillStyle = withAlpha(K.wall, 0.55);
+      c.fill();
+      dimLine(c, a, b, formatLength(Math.hypot(b.x - a.x, b.y - a.y), s.unit), z, K.select, K.roomFill, true);
+    } else {
+      c.beginPath();
+      c.arc(a.x, a.y, px(6), 0, Math.PI * 2);
+      c.fillStyle = K.select;
+      c.fill();
+    }
+  }
+  if (s.zoneDraft?.b) {
+    const { a, b, color: zc } = s.zoneDraft;
+    c.fillStyle = withAlpha(zc, 0.18);
+    c.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    c.setLineDash([px(7), px(4)]);
+    c.strokeStyle = zc;
+    c.lineWidth = px(2);
+    c.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    c.setLineDash([]);
+  }
+
   // ---------- measurements ----------
   const ms = [...(s.measurements ?? [])];
   if (s.measureDraft?.b) ms.push({ a: s.measureDraft.a, b: s.measureDraft.b });
@@ -500,6 +631,54 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
   }
 
   c.restore();
+}
+
+function drawPartition(c: CanvasRenderingContext2D, floor: Floor, pw: Partition, z: number, K: Palette, unit: Unit) {
+  const px = (n: number) => n / z;
+  const poly = partitionPoly(pw);
+  const { bottom } = partitionSpan(floor, pw);
+  const hanging = bottom > 0;
+  const full = !hanging && pw.topMm === undefined;
+  pathPoly(c, poly);
+  c.fillStyle = full ? K.wall : withAlpha(K.wall, hanging ? 0.3 : 0.6);
+  c.fill();
+  if (!full) {
+    // hatch so it reads as "not a full wall"
+    c.save();
+    pathPoly(c, poly);
+    c.clip();
+    const bb = poly.reduce((a, p) => ({ minX: Math.min(a.minX, p.x), maxX: Math.max(a.maxX, p.x), minY: Math.min(a.minY, p.y), maxY: Math.max(a.maxY, p.y) }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+    c.beginPath();
+    const h = bb.maxY - bb.minY;
+    for (let d = bb.minX - h; d < bb.maxX; d += px(6)) {
+      c.moveTo(d, bb.minY);
+      c.lineTo(d + h, bb.maxY);
+    }
+    c.strokeStyle = withAlpha(K.wall, 0.8);
+    c.lineWidth = px(1);
+    c.stroke();
+    c.restore();
+    pathPoly(c, poly);
+    if (hanging) c.setLineDash([px(5), px(3)]);
+    c.strokeStyle = K.wall;
+    c.lineWidth = px(1.3);
+    c.stroke();
+    c.setLineDash([]);
+    const len = partitionLength(pw);
+    if (len * z > 70) {
+      const m = partitionMid(pw);
+      let ang = partitionAngle(pw);
+      if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      const text = partitionHeightText(floor, pw, (mm) => formatLength(mm, unit))
+        .replace('From the floor up to ', '↑ ')
+        .replace(' up to the ceiling', ' to ceiling');
+      c.save();
+      c.translate(m.x, m.y);
+      c.rotate(ang);
+      label(c, text, 0, -(pw.thicknessMm / 2) - px(9), px(10.5), K.label, K.roomFill, 600);
+      c.restore();
+    }
+  }
 }
 
 function dimLine(c: CanvasRenderingContext2D, a: Pt, b: Pt, text: string, z: number, color: string, halo: string, endDots = false) {

@@ -1,7 +1,7 @@
 import { sanitizeEstimate } from '../geometry/estimate';
 // Checks plans coming from outside (share links, backup files) and rebuilds them
 // with only known fields, so a broken or edited file can't break the app.
-import type { Floor, Home, Item, ItemTemplate, Layout, Opening, Room, Side } from '../model/types';
+import type { Floor, Home, Item, ItemTemplate, Layout, Opening, Partition, Person, Room, Side, Zone } from '../model/types';
 import { id as newId } from '../model/defaults.js';
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -61,6 +61,7 @@ function item(i: any): Item | null {
     elevationMm: optNum(i.elevationMm, 0, 20000),
     openBelowMm: optNum(i.openBelowMm, 0, 20000),
     wallMounted: typeof i.wallMounted === 'boolean' ? i.wallMounted : undefined,
+    ...(typeof i.owner === 'string' && i.owner.length <= 40 ? { owner: i.owner } : {}),
     mount: i.mount ? oneOf(i.mount, ['floor', 'ceiling', 'under'] as const, 'floor') : undefined,
     locked: i.locked === true ? true : undefined,
   };
@@ -74,6 +75,28 @@ function item(i: any): Item | null {
     };
   }
   return it;
+}
+
+const pt = (p: any) => ({ x: num(p?.x, 0), y: num(p?.y, 0) });
+function partition(p: any): Partition | null {
+  if (!isObj(p) || !isObj(p.a) || !isObj(p.b)) return null;
+  const top = optNum(p.topMm, 100, 12000);
+  return {
+    id: str(p.id, newId(), 40),
+    a: pt(p.a),
+    b: pt(p.b),
+    thicknessMm: num(p.thicknessMm, 114, 20, 1000),
+    bottomMm: num(p.bottomMm, 0, 0, 10000),
+    ...(top !== undefined ? { topMm: top } : {}),
+  };
+}
+function zone(z: any): Zone | null {
+  if (!isObj(z) || typeof z.personId !== 'string') return null;
+  return { id: str(z.id, newId(), 40), personId: z.personId.slice(0, 40), x: num(z.x, 0), y: num(z.y, 0), width: num(z.width, 1000, 100, 1e6), length: num(z.length, 1000, 100, 1e6) };
+}
+function person(p: any): Person | null {
+  if (!isObj(p)) return null;
+  return { id: str(p.id, newId(), 40), name: str(p.name, 'Roommate', 30), color: color(p.color) };
 }
 
 function floor(f: any, index: number): Floor | null {
@@ -90,6 +113,8 @@ function floor(f: any, index: number): Floor | null {
     sharedWalls: [],
     openings: (Array.isArray(f.openings) ? f.openings : []).map((o: any) => opening(o, ids)).filter(Boolean) as Opening[],
     items: (Array.isArray(f.items) ? f.items : []).map(item).filter(Boolean).slice(0, 2000) as Item[],
+    ...(Array.isArray(f.partitions) ? { partitions: f.partitions.map(partition).filter(Boolean).slice(0, 500) as Partition[] } : {}),
+    ...(Array.isArray(f.zones) ? { zones: f.zones.map(zone).filter(Boolean).slice(0, 50) as Zone[] } : {}),
     ...(Array.isArray(f.okWarnings)
       ? { okWarnings: f.okWarnings.filter((w: unknown) => typeof w === 'string' && w.length < 120).slice(0, 500) }
       : {}),
@@ -116,6 +141,9 @@ export function sanitizeHome(h: any): Home | null {
     layouts,
     createdAt: num(h.createdAt, now, 0, 9e15),
     updatedAt: num(h.updatedAt, now, 0, 9e15),
+    ...(Array.isArray(h.people) ? { people: h.people.map(person).filter(Boolean).slice(0, 12) as Person[] } : {}),
+    ...(typeof h.meId === 'string' && h.meId.length <= 40 ? { meId: h.meId } : {}),
+    ...(typeof h.originId === 'string' && h.originId.length <= 40 ? { originId: h.originId } : {}),
   };
 }
 
@@ -123,12 +151,13 @@ export function sanitizeTemplate(t: any): ItemTemplate | null {
   if (!isObj(t)) return null;
   return {
     id: str(t.id, newId(), 40),
-    type: 'custom',
+    type: typeof t.type === 'string' && /^[a-z0-9-]{1,40}$/.test(t.type) ? t.type : 'custom',
     label: str(t.label, 'Item', 40),
     width: num(t.width, 600, 10, 100000),
     depth: num(t.depth, 600, 10, 100000),
     heightMm: optNum(t.heightMm, 0, 20000),
     shape: oneOf(t.shape, ['rect', 'round'] as const, 'rect'),
     color: color(t.color),
+    ...(typeof t.count === 'number' && t.count > 1 ? { count: Math.min(20, Math.round(t.count)) } : {}),
   };
 }

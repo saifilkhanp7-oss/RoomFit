@@ -56,6 +56,53 @@ export function Help() {
           </ul>
         </section>
         <section>
+          <h2>Walls inside a room</h2>
+          <ul>
+            <li>
+              Tap <strong>Wall</strong>, then drag where the wall goes (or tap its two ends). It snaps to walls and corners and stays straight.
+            </li>
+            <li>
+              Select it to set its length, thickness and height: <strong>Full wall</strong>, <strong>Half wall</strong>, or <strong>From the ceiling down</strong> (e.g. from 7′ up, so a cupboard fits under
+              it). Drag the round ends to change it.
+            </li>
+            <li>It counts in the bricks, cement and paint. A wall standing on the floor also takes away tiles under it.</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Will it get in?</h2>
+          <ul>
+            <li>
+              Put the main door on an outside wall. Then select something big (a sofa, fridge, cupboard) and tap the <strong>route</strong> button. RoomFit tries to carry it from the main door (or up the
+              stairs) to its spot: straight, turned, on its side or lying flat.
+            </li>
+            <li>You see the way it goes. If it gets stuck, it tells you where, like "The way into the Bedroom is too tight". Tick "Other furniture is in the way" if the rest is already in.</li>
+          </ul>
+        </section>
+        <section>
+          <h2>My things</h2>
+          <ul>
+            <li>
+              Select your own bed, cupboard, cycle… → <strong>Add to My things</strong>. They stay with your account for every home. Set how many you have (2 chairs).
+            </li>
+            <li>
+              ⋯ More → <strong>My things</strong> → "Put all my things in this plan" puts them along the walls. "Which home fits my things?" checks all your homes and tells you what doesn't fit.
+            </li>
+          </ul>
+        </section>
+        <section>
+          <h2>Roommates</h2>
+          <ul>
+            <li>
+              ⋯ More → <strong>Roommates</strong>: add names. Each person gets a colour. "Draw … space" marks their part of the room. Select furniture → <strong>Belongs to</strong> to say whose it is.
+            </li>
+            <li>You get a warning if someone's things are in another person's space.</li>
+            <li>
+              A roommate can add their own things: send them the link, they save a copy, tap "This is me", add their things and send their link back. Open it and tap{' '}
+              <strong>Bring in their things</strong>.
+            </li>
+          </ul>
+        </section>
+        <section>
           <h2>Rooms, doors and windows</h2>
           <ul>
             <li>
@@ -96,10 +143,16 @@ export function Help() {
           </ul>
         </section>
         <section>
-          <h2>Bricks & tiles cost</h2>
+          <h2>Building cost</h2>
           <ul>
             <li>
-              ⋯ More → <strong>Bricks & tiles cost</strong> (or <strong>Cost</strong> at the top on a laptop/iPad).
+              ⋯ More → <strong>Building cost</strong> (or <strong>Cost</strong> at the top on a laptop/iPad). Four tabs: Bricks, Cement, Paint, Tiles, and the total at the bottom.
+            </li>
+            <li>
+              <strong>Cement:</strong> bags for the mortar between bricks, the plaster on the walls and the bed under the floor tiles. Change the price of a bag, the mixes (like 1 : 6) and thicknesses.
+            </li>
+            <li>
+              <strong>Paint:</strong> price of a litre, how many coats, and how much one litre covers (it's on the tin). Ceilings and outside walls can be added.
             </li>
             <li>
               <strong>Bricks:</strong> enter the size of one brick, the gap between bricks (mortar) and the price of one brick. RoomFit works out the bricks for the walls (up to each room's ceiling height,

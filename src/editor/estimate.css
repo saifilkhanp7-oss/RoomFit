@@ -5,14 +5,24 @@
 }
 .est-top {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+}
+.est-tabs {
+  display: flex;
+  width: 100%;
+}
+.est-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.est-cur-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-}
-.est-top .segmented:first-child {
-  flex: 1;
-  min-width: 170px;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
 }
 .est-cur button {
   min-width: 36px;
@@ -123,4 +133,115 @@
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
+}
+.est-grand-parts {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.est-tabs button {
+  padding: 0 4px;
+}
+.thing-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.thing-row .est-room-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.thing-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.stepper span {
+  min-width: 22px;
+  text-align: center;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.stepper .icon-btn {
+  width: 34px;
+  height: 34px;
+}
+.fit-row {
+  padding: 0;
+}
+.fit-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.fit-btn strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fit-row.ok strong svg {
+  color: var(--green, #2f9e44);
+}
+.fit-row.no strong svg {
+  color: var(--red, #e5484d);
+}
+.fit-missing {
+  font-size: 13px;
+}
+.person-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.person-dot.big {
+  width: 16px;
+  height: 16px;
+}
+.me-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.swatch-sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+.swatch-sm.on {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--text);
+}
+.add-person {
+  display: flex;
+  gap: 8px;
+}
+.add-person .input {
+  flex: 1;
+  min-width: 0;
+}
+.steps-list {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.45;
 }

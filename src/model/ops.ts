@@ -1,6 +1,7 @@
 import { isBasementName } from '../geometry/levels';
 // Pure edit operations on a floor or layout. The store wraps these with undo history.
-import type { Floor, Item, Layout, Opening, Room, RoomKind, Side } from './types';
+import type { Floor, Home, Item, Layout, Opening, Partition, Room, RoomKind, Side, Zone } from './types';
+import { id as newItemId } from './defaults';
 import { cloneLayoutFresh, floorName, id, makeFloor, makeRoom } from './defaults';
 import { innerWallOf } from '../geometry/walls';
 import { itemBox, itemPoly } from '../geometry/items';
@@ -264,4 +265,62 @@ export function setWarningOk(f: Floor, warningId: string, ok: boolean): Floor {
   if (ok) cur.add(warningId);
   else cur.delete(warningId);
   return { ...f, okWarnings: [...cur] };
+}
+
+// ---------- inner walls ----------
+
+export function addPartition(f: Floor, p: Partition): Floor {
+  return { ...f, partitions: [...(f.partitions ?? []), p] };
+}
+export function updatePartition(f: Floor, pid: string, patch: Partial<Partition>): Floor {
+  return { ...f, partitions: (f.partitions ?? []).map((p) => (p.id === pid ? { ...p, ...patch } : p)) };
+}
+export function deletePartition(f: Floor, pid: string): Floor {
+  return { ...f, partitions: (f.partitions ?? []).filter((p) => p.id !== pid) };
+}
+
+// ---------- roommates' spaces ----------
+
+export function addZone(f: Floor, z: Zone): Floor {
+  return { ...f, zones: [...(f.zones ?? []), z] };
+}
+export function updateZone(f: Floor, zid: string, patch: Partial<Zone>): Floor {
+  return { ...f, zones: (f.zones ?? []).map((z) => (z.id === zid ? { ...z, ...patch } : z)) };
+}
+export function deleteZone(f: Floor, zid: string): Floor {
+  return { ...f, zones: (f.zones ?? []).filter((z) => z.id !== zid) };
+}
+
+// ---------- roommates ----------
+
+export const PERSON_COLORS = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#e64980', '#5f3dc4'];
+
+/**
+ * Bring a roommate's things from their copy of the home into mine: on each layout and floor
+ * (matched by position), their things and their space replace what I had for them.
+ */
+export function mergeRoommateThings(mine: Home, theirs: Home, personId: string): { home: Home; count: number } {
+  let count = 0;
+  const person = theirs.people?.find((p) => p.id === personId);
+  const people = mine.people ?? [];
+  const nextPeople = person && !people.some((p) => p.id === personId) ? [...people, person] : people;
+  const layouts = mine.layouts.map((l, li) => {
+    const tl = theirs.layouts[li] ?? theirs.layouts[0];
+    return {
+      ...l,
+      floors: l.floors.map((f, fi) => {
+        const tf = tl?.floors[fi];
+        if (!tf) return f;
+        const items = tf.items.filter((it) => it.owner === personId).map((it) => ({ ...it, id: newItemId() }));
+        const zones = (tf.zones ?? []).filter((z) => z.personId === personId).map((z) => ({ ...z, id: newItemId() }));
+        count += items.length;
+        return {
+          ...f,
+          items: [...f.items.filter((it) => it.owner !== personId), ...items],
+          zones: [...(f.zones ?? []).filter((z) => z.personId !== personId), ...zones],
+        };
+      }),
+    };
+  });
+  return { home: { ...mine, people: nextPeople, layouts }, count };
 }

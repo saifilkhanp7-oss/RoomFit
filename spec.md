@@ -584,3 +584,51 @@ Emulated WebKit is close to Safari but not identical — especially for touch ge
 - New catalog groups: **Bathroom** (toilet, wash basin, shower area, washing machine) and **Vehicles** (hatchback 3.8×1.7 m, sedan 4.5×1.75 m, SUV 4.6×1.85 m, motorbike, scooter, bicycle).
 - Door type **Shutter** (garage), the default for doors added to parking spaces.
 - Vehicle warnings: no space to open the car doors (needs 2 ft on at least one side), and the space's widest door/gate narrower than the vehicle + 30 cm (15 cm for two-wheelers). Overlap/outside/in-wall warnings apply as for furniture.
+
+## 15. Stacking and height from floor (added later)
+
+- Every item has `elevationMm` (height from floor, default 0) and a height. Its vertical span is elevation → elevation + height.
+- `openBelowMm`: open space under items on legs (hostel cot 1′2″, study table 2′3″, chair 1′4″…). 0 = closed (box bed, cupboard). Set in the item panel: Underneath → Open (legs) / Closed.
+- `wallMounted`: shelves, mirrors (or any item ticked "Fixed to the wall") may hang in the air.
+- Overlap: two items overlapping on the plan are fine if one sits on top of the other (30 mm tolerance) or one fits fully in the other's open space. Otherwise red: "X (h tall) doesn't fit under Y (open space)" or "A overlaps B", with the fix "Put A on top of B".
+- In the air: an item above the floor with nothing under it and not fixed to the wall → yellow, with fix "Put it on top of …" or "Put it on the floor".
+- Door swing, walking space and ceiling/window/fan checks use the vertical span (items above the door height don't block the swing; only floor items count for walking).
+- **Let it be**: any warning can be accepted. Stored per floor in `okWarnings` (warning ids); shown under "Let be (n)" with "Show warning again". Accepted warnings don't colour the plan.
+- Plan: stacked items are drawn above, with a "↑ height" badge; open items show leg dots. Tapping picks the top item. 3D: items start at their elevation; open items are a top plus four legs.
+- New catalog items: suitcase, box / carton, stool.
+
+## 16. 3D for multi-floor homes and the stair opening (added later)
+
+- 3D is available for every home. Multi-floor homes get a floor picker in 3D: **All floors** (default) or one floor. "All" stacks the floors at their real levels with a "Space between floors" slider (0–3 m) to pull them apart; "Cut walls" works on all floors.
+- Levels: floors are stored bottom → top; the first floor that isn't a basement is ground (level 0); basements are below. When basements are shown the ground is see-through.
+- `Floor.floorHeightMm`: floor-to-floor height (set from the floor tab → Floor height). Default = highest ceiling on the floor + 150 mm slab.
+- Each upper floor has a slab under it with a hole where the stairs from the floor below come up. Stairs are drawn as real steps (straight, L, U, with landings) rising to the floor above (or to the ceiling on the top floor).
+- Height checks (ceiling, window, fan) now run on multi-floor homes too.
+- Over the stair opening from the floor below: any item may be placed. It gets a **yellow** warning that can be let be: stairs → "fine if the stairs go on up, check the head room"; anything else → "fine only if the floor is closed there". Ceiling things (fans, the new **Hanging lamp**) never warn there.
+- Hanging lamp: a ceiling item that hangs 2 ft below the ceiling. It only warns if something touches it (fans keep the 3 ft clearance).
+
+## 17. Bricks & tiles cost, open stairs (added later)
+
+- **Open stairs:** `stairs.open`. In 3D each step is a 250 mm slab, open below. Something overlapping open stairs is fine if its top is below the lowest step underside over it; otherwise red "doesn't fit under the stairs there". Closed stairs: "X is on the stairs" as before.
+- **Cost screen** (More → Bricks & tiles cost; "Cost" in the top bar on wide screens). Settings are saved on the layout (`Layout.estimate`), synced and shared with it, and checked on load.
+- **Bricks:** brick L × W × H, gap (mortar joint), price, extra % (default 5). Bricks = volume ÷ ((L+gap)(W+gap)(H+gap)) × (1 + extra), rounded up per part.
+  - Walls: every wall box up to the room's ceiling (railing for balconies), doors and windows cut out; overlapping boxes (shared walls, corners) counted once (exact union of boxes).
+  - Stairs: the volume of the steps (solid when closed, slabs when open), rising to the floor above.
+  - Ceiling / roof: the area of the outer rooms with their walls (not balconies) × thickness (default 125 mm), minus the stair hole when there's a floor above.
+  - Defaults: 190 × 90 × 90 mm, 10 mm gap (500 per m³); 9″ × 4½″ × 3″ for feet users. Price ₹8 (example).
+- **Tiles:** one tile for all rooms (L × W, gap, price) + extra % (default 10). Each room: Same tile / Own tile / No tiles. Area = room floor without rooms inside it and stair openings. Tiles per room are rounded up.
+- Currency: ₹ (default), $, €, £. Grand total = bricks + tiles. Mortar, cement and labour are not included.
+
+## 18. Inner walls, paint & cement, will it get in, my things, roommates (added later)
+
+**Inner walls** (`Floor.partitions`): a straight wall between two points, any angle (snaps to walls/corners, straightens near 0°/90°), thickness (default 4½″), `bottomMm` (0 = on the floor) and `topMm` (unset = up to the room's ceiling). Presets: Full wall, Half wall (3′), From the ceiling down (7′ up). Drawn hatched when not full; walls higher up are drawn over furniture with a dashed outline. Warnings: a thing that reaches into the wall's height range is red ("goes into the inner wall" / "doesn't fit under the inner wall"). 3D: a box at its height. Costs: bricks (length × thickness × height), both faces in paint and plaster, footprint taken off tiles when it stands on the floor.
+
+**Cement:** bags (50 kg = 0.0347 m³) = wet volume × 1.33 ÷ (1 + mix) ÷ 0.0347 for: brick mortar (brickwork volume − bricks without the gap; mix 1:6), plaster (inside faces + inner walls (+ outside) × 12 mm; 1:4), tile bed (tiled area × 20 mm; 1:4). Price per bag (₹420 example).
+
+**Paint:** area = inside faces of every room up to its ceiling (both sides of shared walls; rooms inside rooms counted once; doors/windows taken out) + inner walls (both faces) + ceilings (option) + outside of the house (option). Litres = area × coats ÷ coverage (default 12 m²/L, 2 coats), rounded up to 0.1 L. Price per litre (₹250 example).
+
+**Will it get in?** (route button on a selected item): the thing is moved as a rectangle through a grid of positions (~40–120 mm) and 15° turns (breadth-first search) from just outside every outside door (a door with no room just outside it), or from the top of the stairs on upper floors. Obstacles: walls and window glass, door heads above the door height, inner walls in its height, optionally other furniture. It tries "as it stands", "on its side" and "lying flat" (vertical size must pass under door heads). Stairs: the narrowest side must be ≤ flight width; for L/U stairs the length must turn the landing (longest thing of width w around a corner of passages a, b: min over θ of a/sinθ + b/cosθ − w/(sinθ·cosθ)). Result: "Yes, it gets in through …", or where it gets stuck ("as far as the Hall. The way into the Bedroom is too tight"), with ghost outlines along the way.
+
+**My things:** saved items ("templates") now keep their type and have a count; "Add to My things" works for any item. "Put all my things in this plan" places the ones not already on the floor (same name and size) along the walls with MaxRects packing (biggest first, both turns), keeping clear of door swings, stairs, stair openings, inner walls and existing furniture; vehicles only into parking, nothing into bathrooms/balconies. "Which home fits my things?" packs each home's first layout (empty rooms) and lists what doesn't fit, or "but tight" when they'd take over 55% of the free floor.
+
+**Roommates** (`Home.people`, `Floor.zones`, `Item.owner`, `Home.meId`, `Home.originId`): people with colours; a space per person (rectangle, drag to move, corner to resize); "Belongs to" on furniture (coloured dot on the plan); "This is me" makes new things yours. Yellow warnings: someone's thing in another person's space, two people's spaces overlapping. Round trip: share links carry people, meId and the original home id; a copy keeps `originId` and forgets `meId`; opening a roommate's link offers "Bring in X's things", which replaces X's things and space on each layout/floor (matched by position) in my home.

@@ -55,6 +55,7 @@ interface AppState {
 
   addTemplate: (t: ItemTemplate) => void;
   deleteTemplate: (id: string) => void;
+  updateTemplate: (id: string, patch: Partial<ItemTemplate>) => void;
 
   deleteAllData: () => void;
   setSaveFailed: (v: boolean) => void;
@@ -64,6 +65,8 @@ interface AppState {
   /** Apply changes that came from the cloud (other devices). */
   applyRemote: (homes: { id: string; deleted: boolean; updatedAt: number; data: Home | null }[], templates?: { data: ItemTemplate[]; updatedAt: number }) => void;
   setHomeKind: (homeId: string, kind: 'single' | 'multi') => void;
+  /** Change home-level things (roommates, who I am). */
+  patchHome: (homeId: string, fn: (h: Home) => Home) => void;
 }
 
 /** Where this account's plans are saved in the browser. */
@@ -252,6 +255,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     addTemplate: (t) =>
       set((s) => ({ data: { ...s.data, customItemTemplates: [t, ...s.data.customItemTemplates].slice(0, 50), templatesUpdatedAt: Date.now() } })),
+    updateTemplate: (tid, patch) =>
+      set((s) => ({ data: { ...s.data, customItemTemplates: s.data.customItemTemplates.map((t) => (t.id === tid ? { ...t, ...patch } : t)), templatesUpdatedAt: Date.now() } })),
     deleteTemplate: (tid) =>
       set((s) => ({ data: { ...s.data, customItemTemplates: s.data.customItemTemplates.filter((t) => t.id !== tid), templatesUpdatedAt: Date.now() } })),
 
@@ -327,6 +332,7 @@ export const useAppStore = create<AppState>((set, get) => {
       }),
 
     setHomeKind: (homeId, kind) => set((s) => ({ data: mapHome(s.data, homeId, (h) => ({ ...h, kind })) })),
+    patchHome: (homeId, fn) => set((s) => ({ data: mapHome(s.data, homeId, fn) })),
   };
 });
 

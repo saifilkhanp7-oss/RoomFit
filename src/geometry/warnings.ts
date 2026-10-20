@@ -1,5 +1,6 @@
+import { partitionPoly, partitionSpan } from './partitions';
 import { stairBlocksWorld } from './stairs';
-import type { Floor, Item, Room, Settings, Unit } from '../model/types';
+import type { Floor, Item, Room, Settings, Unit, Person } from '../model/types';
 import { catalogEntry, isStairs, isWallFixed, itemDrop, itemElevation, itemHeight, itemMount, itemSpan } from '../model/catalog';
 import { formatLength } from '../model/units';
 import { itemPoly } from './items';
@@ -49,6 +50,8 @@ export interface WarningOptions {
   floorBelow?: Floor;
   settings: Pick<Settings, 'minWalkMm' | 'fanClearanceMm'>;
   unit: Unit;
+  /** Roommates, to warn about things in someone else's space. */
+  people?: Person[];
   /** Height of the stairs on this floor (to the floor above). Default: the ceiling. */
   stairRiseMm?: number;
   /** Height checks (taller than ceiling, window, fan, lamp). */
@@ -180,6 +183,24 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
       message: inWall ? `${it.label} goes into the wall` : `${it.label} is outside the room`,
       itemIds: [it.id],
     });
+  }
+
+  // 2b. Inner walls: things that go into them. A wall that starts higher up (above a cupboard)
+  // only matters if the thing is taller than the gap under it.
+  for (const pw of floor.partitions ?? []) {
+    const pp = partitionPoly(pw);
+    const { bottom, top } = partitionSpan(floor, pw);
+    for (const it of items) {
+      if (itemMount(it) !== 'floor') continue;
+      if (!polysIntersect(polys.get(it.id)!, pp)) continue;
+      const span = itemSpan(it);
+      if (span.top <= bottom + STACK_TOL || span.bottom >= top - STACK_TOL) continue;
+      const message =
+        bottom > STACK_TOL && span.bottom < bottom
+          ? `${it.label} (${fmt(span.top)} high) doesn't fit under the inner wall (it starts ${fmt(bottom)} above the floor)`
+          : `${it.label} goes into the inner wall`;
+      add({ id: `pwall:${it.id}:${pw.id}`, level: 'red', message, itemIds: [it.id] });
+    }
   }
 
   // 3. Over the stair opening from the floor below. Whether that's fine depends on the design
@@ -323,6 +344,42 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
       }
     }
   }
+
+  // 8. Roommates: someone's things in another person's space
+  const nameOf = (pid: string) => opts.people?.find((p) => p.id === pid)?.name;
+  for (const zn of floor.zones ?? []) {
+    const zpoly = [
+      { x: zn.x, y: zn.y },
+      { x: zn.x + zn.width, y: zn.y },
+      { x: zn.x + zn.width, y: zn.y + zn.length },
+      { x: zn.x, y: zn.y + zn.length },
+    ];
+    const zName = nameOf(zn.personId);
+    if (!zName) continue;
+    for (const it of items) {
+      if (!it.owner || it.owner === zn.personId) continue;
+      const oName = nameOf(it.owner);
+      if (!oName || !polysIntersect(polys.get(it.id)!, zpoly)) continue;
+      add({ id: `zone:${it.id}:${zn.id}`, level: 'yellow', message: `${oName}'s ${it.label.toLowerCase()} is in ${zName}'s space`, itemIds: [it.id] });
+    }
+  }
+  const zs = floor.zones ?? [];
+  for (let i = 0; i < zs.length; i++)
+    for (let j = i + 1; j < zs.length; j++) {
+      const a = zs[i],
+        b = zs[j];
+      if (a.personId === b.personId) continue;
+      const ox = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y + a.length, b.y + b.length) - Math.max(a.y, b.y);
+      if (ox > 50 && oy > 50 && nameOf(a.personId) && nameOf(b.personId))
+        list.push({
+          id: `zones:${a.id}:${b.id}`,
+          level: 'yellow',
+          message: `${nameOf(a.personId)}'s and ${nameOf(b.personId)}'s spaces overlap`,
+          itemIds: [],
+          focus: { x: Math.max(a.x, b.x) + ox / 2, y: Math.max(a.y, b.y) + oy / 2 },
+        });
+    }
 
   // "Let it be": warnings the user accepted are kept aside and don't colour the plan.
   const ok = new Set(floor.okWarnings ?? []);

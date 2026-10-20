@@ -102,9 +102,14 @@ export function cloneLayoutFresh(layout: Layout, name?: string): Layout {
       })),
       openings: f.openings.map((o) => ({ ...o, id: id(), roomId: roomMap.get(o.roomId) ?? o.roomId })),
       items: f.items.map((it) => ({ ...it, id: id() })),
+      ...(f.partitions ? { partitions: f.partitions.map((p) => ({ ...p, id: id() })) } : {}),
+      ...(f.zones ? { zones: f.zones.map((z) => ({ ...z, id: id() })) } : {}),
     };
   });
-  return { id: id(), name: name ?? layout.name, floors };
+  const estimate = layout.estimate
+    ? { ...layout.estimate, rooms: Object.fromEntries(Object.entries(layout.estimate.rooms).map(([k, v]) => [roomMap.get(k) ?? k, v])) }
+    : undefined;
+  return { id: id(), name: name ?? layout.name, floors, ...(estimate ? { estimate } : {}) };
 }
 
 export function cloneHomeFresh(home: Home, name: string): Home {
@@ -112,6 +117,7 @@ export function cloneHomeFresh(home: Home, name: string): Home {
   return {
     ...home,
     id: id(),
+    originId: home.originId ?? home.id,
     name,
     layouts: home.layouts.map((l) => cloneLayoutFresh(l)),
     createdAt: now,

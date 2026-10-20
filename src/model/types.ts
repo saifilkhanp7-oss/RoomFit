@@ -21,6 +21,40 @@ export interface Home {
   layouts: Layout[];
   createdAt: number;
   updatedAt: number;
+  /** Roommates sharing this home (each with a colour). */
+  people?: Person[];
+  /** Which person "I" am in this copy (set by a roommate in their copy). */
+  meId?: string;
+  /** The home this one was copied from (to bring a roommate's things back). */
+  originId?: string;
+}
+
+export interface Person {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/** A person's own space in a shared room. */
+export interface Zone {
+  id: string;
+  personId: string;
+  x: number;
+  y: number;
+  width: number;
+  length: number;
+}
+
+/** A wall inside a room: anywhere, any angle, and any height range (half wall, wall above a cupboard...). */
+export interface Partition {
+  id: string;
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+  thicknessMm: number;
+  /** Height of its bottom above the floor (0 = stands on the floor). */
+  bottomMm: number;
+  /** Height of its top above the floor; not set = up to the ceiling. */
+  topMm?: number;
 }
 
 export interface LayoutView {
@@ -70,6 +104,32 @@ export interface Estimate {
   tileWastePct: number;
   /** Rooms with their own tile, or no tiles. Others use `tile`. */
   rooms: Record<string, { mode: 'own' | 'none'; tile?: TileSpec }>;
+  paint: PaintSpec;
+  cement: CementSpec;
+}
+
+export interface PaintSpec {
+  coats: number;
+  /** m² one litre covers in one coat. */
+  coverageM2: number;
+  /** Price of one litre. */
+  price: number;
+  ceiling: boolean;
+  outside: boolean;
+}
+
+export interface CementSpec {
+  /** Price of one 50 kg bag. */
+  price: number;
+  /** Brick mortar mix, cement : sand = 1 : mortarMix. */
+  mortarMix: number;
+  plaster: boolean;
+  plasterMix: number;
+  plasterMm: number;
+  plasterOutside: boolean;
+  tileBed: boolean;
+  tileBedMm: number;
+  tileBedMix: number;
 }
 
 export interface Floor {
@@ -86,6 +146,10 @@ export interface Floor {
   okWarnings?: string[];
   /** Floor-to-floor height (to the floor above). Default: highest ceiling + slab. */
   floorHeightMm?: number;
+  /** Walls inside rooms. */
+  partitions?: Partition[];
+  /** Roommates' own spaces. */
+  zones?: Zone[];
 }
 
 export type RoomKind = 'room' | 'hall' | 'bathroom' | 'kitchen' | 'balcony' | 'parking' | 'store';
@@ -152,6 +216,8 @@ export interface Item {
     /** Open underneath: the space under the stairs can be used (storage, a desk...). */
     open?: boolean;
   };
+  /** Whose it is (roommate id); not set = shared. */
+  owner?: string;
 }
 
 export interface ItemTemplate {
@@ -164,6 +230,8 @@ export interface ItemTemplate {
   heightMm?: number;
   shape: 'rect' | 'round';
   color: string;
+  /** How many of it you have (My things). */
+  count?: number;
 }
 
 export interface Settings {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus } from 'lucide-react';
-import type { Item, Unit } from '../../model/types';
+import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus, Route } from 'lucide-react';
+import type { Item, Unit, Person } from '../../model/types';
 import { LengthInput } from '../../components/LengthInput';
 import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow, itemDrop } from '../../model/catalog';
 import { normAngle } from '../../geometry/items';
@@ -18,13 +18,15 @@ interface Props {
   onDuplicate: () => void;
   onDelete: () => void;
   onSaveTemplate?: () => void;
+  onRoute?: () => void;
+  people?: Person[];
   /** Item it could be put on top of (under its middle). */
   support?: Item;
   onStack: () => void;
   onFloor: () => void;
 }
 
-export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate, support, onStack, onFloor }: Props) {
+export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate, support, onStack, onFloor, onRoute, people = [] }: Props) {
   const height = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
   const openBelow = itemOpenBelow(item);
   const [label, setLabel] = useState(item.label);
@@ -195,6 +197,22 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
         </>
       )}
 
+      {people.length > 0 && !isStairs(item) && (
+        <div className="field">
+          <span className="field-label">Belongs to</span>
+          <div className="preset-row" role="group" aria-label="Belongs to">
+            <button className="chip" aria-pressed={!item.owner} onClick={() => onChange({ owner: undefined })}>
+              Shared
+            </button>
+            {people.map((p) => (
+              <button key={p.id} className="chip person-chip" aria-pressed={item.owner === p.id} onClick={() => onChange({ owner: p.id })}>
+                <span className="person-dot" style={{ background: p.color }} /> {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <label htmlFor="item-rot">Rotation (degrees)</label>
         <div className="rot-row">
@@ -250,9 +268,14 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
           <Trash2 size={17} /> Delete
         </button>
       </div>
+      {onRoute && (
+        <button className="btn btn-block" style={{ marginTop: 8 }} onClick={onRoute}>
+          <Route size={17} /> Will it get in? (from the door to here)
+        </button>
+      )}
       {onSaveTemplate && (
         <button className="btn btn-ghost btn-block" style={{ marginTop: 6 }} onClick={onSaveTemplate}>
-          <BookmarkPlus size={17} /> Save to My items
+          <BookmarkPlus size={17} /> Add to My things
         </button>
       )}
       <p className="hint" style={{ marginTop: 10 }}>

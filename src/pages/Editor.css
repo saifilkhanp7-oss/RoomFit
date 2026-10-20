@@ -378,10 +378,22 @@
   color: var(--accent-text);
   background: var(--accent);
 }
-@media (max-width: 380px) {
+/* six tools must fit a phone (320–430 px) */
+@media (max-width: 560px) {
+  .bottom-toolbar {
+    width: calc(100% - 16px - var(--safe-left) - var(--safe-right));
+  }
   .tool-btn {
-    min-width: 54px;
-    padding: 0 4px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 2px;
+    font-size: 11px;
+  }
+  .tool-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
 }
 
@@ -504,4 +516,47 @@
   letter-spacing: 0.06em;
   color: var(--text-3);
   margin: 18px 0 6px;
+}
+.route-banner {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: min(520px, calc(100% - 24px));
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  font-size: 14px;
+}
+.route-banner.no {
+  border-left-color: var(--red, #e5484d);
+}
+.route-banner.ok {
+  border-left-color: var(--green, #2f9e44);
+}
+.route-banner p {
+  margin: 0 0 6px;
+  line-height: 1.35;
+}
+.route-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.route-actions .check-row {
+  font-size: 13px;
+  margin: 0;
+}
+.roommate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }

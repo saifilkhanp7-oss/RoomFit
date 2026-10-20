@@ -3,7 +3,7 @@ import { RotateCcw } from 'lucide-react';
 import { Dialog } from '../components/Dialog';
 import { LengthInput } from '../components/LengthInput';
 import type { Estimate, Layout, TileSpec, Unit } from '../model/types';
-import { areaText, brickReport, count, defaultEstimate, estimateOf, money, tileReport, volume } from '../geometry/estimate';
+import { areaText, brickReport, cementReport, count, defaultEstimate, estimateOf, money, paintReport, tileReport, volume } from '../geometry/estimate';
 import { isStairs } from '../model/catalog';
 import './estimate.css';
 
@@ -79,33 +79,48 @@ interface Props {
 /** Bricks and tiles: how many and what they cost, from the walls, stairs, ceilings and floors of the plan. */
 export function EstimateDialog({ layout, unit, multi, onChange, onClose }: Props) {
   const est = estimateOf(layout.estimate, unit);
-  const [tab, setTab] = useState<'bricks' | 'tiles'>('bricks');
+  const [tab, setTab] = useState<'bricks' | 'cement' | 'paint' | 'tiles'>('bricks');
   const set = (patch: Partial<Estimate>) => onChange({ ...est, ...patch });
   const bricks = useMemo(() => brickReport(layout.floors, est), [layout.floors, layout.estimate, unit]); // eslint-disable-line react-hooks/exhaustive-deps
   const tiles = useMemo(() => tileReport(layout.floors, est), [layout.floors, layout.estimate, unit]); // eslint-disable-line react-hooks/exhaustive-deps
+  const paint = useMemo(() => paintReport(layout.floors, est), [layout.floors, layout.estimate, unit]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cement = useMemo(() => cementReport(layout.floors, est, unit), [layout.floors, layout.estimate, unit]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasStairs = layout.floors.some((f) => f.items.some(isStairs));
+  const pt = est.paint;
+  const cm = est.cement;
+  const SQFT = 10.7639;
+  const total = bricks.cost + cement.cost + paint.cost + tiles.cost;
   const cur = est.currency;
   const b = est.brick;
   const anyOwn = Object.keys(est.rooms).length > 0;
 
   return (
-    <Dialog title="Bricks & tiles cost" subtitle="Change any size or price. The numbers update as you go." onClose={onClose}>
+    <Dialog title="Building cost" subtitle="Change any size or price. The numbers update as you go." onClose={onClose}>
       <div className="est">
         <div className="est-top">
-          <div className="segmented" role="tablist" aria-label="Bricks or tiles">
+          <div className="segmented est-tabs" role="tablist" aria-label="What to count">
             <button role="tab" aria-pressed={tab === 'bricks'} aria-selected={tab === 'bricks'} onClick={() => setTab('bricks')}>
               Bricks
+            </button>
+            <button role="tab" aria-pressed={tab === 'cement'} aria-selected={tab === 'cement'} onClick={() => setTab('cement')}>
+              Cement
+            </button>
+            <button role="tab" aria-pressed={tab === 'paint'} aria-selected={tab === 'paint'} onClick={() => setTab('paint')}>
+              Paint
             </button>
             <button role="tab" aria-pressed={tab === 'tiles'} aria-selected={tab === 'tiles'} onClick={() => setTab('tiles')}>
               Tiles
             </button>
           </div>
-          <div className="segmented est-cur" role="group" aria-label="Currency">
-            {CURRENCIES.map((c) => (
-              <button key={c} aria-pressed={cur === c} onClick={() => set({ currency: c })}>
-                {c}
-              </button>
-            ))}
+          <div className="est-cur-row">
+            <span>Currency</span>
+            <div className="segmented est-cur" role="group" aria-label="Currency">
+              {CURRENCIES.map((c) => (
+                <button key={c} aria-pressed={cur === c} onClick={() => set({ currency: c })}>
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -164,6 +179,109 @@ export function EstimateDialog({ layout, unit, multi, onChange, onClose }: Props
                   {count(bricks.bricks)} bricks × {money(b.price, cur)}
                 </span>
                 <strong data-testid="brick-cost">{money(bricks.cost, cur)}</strong>
+              </div>
+            </div>
+          </>
+        ) : tab === 'cement' ? (
+          <>
+            <div className="row">
+              <NumField id="cement-price" label="Price of one bag (50 kg)" prefix={cur} value={cm.price} onChange={(price) => set({ cement: { ...cm, price } })} />
+              <NumField id="cement-mortar" label="Brick mortar mix  1 :" value={cm.mortarMix} onChange={(mortarMix) => set({ cement: { ...cm, mortarMix: Math.max(1, mortarMix) } })} />
+            </div>
+            <p className="hint">Mortar goes in the gaps between the bricks (from the Bricks tab). 1 : 6 means 1 part cement, 6 parts sand.</p>
+            <label className="check-row">
+              <input type="checkbox" checked={cm.plaster} onChange={(e) => set({ cement: { ...cm, plaster: e.target.checked } })} />
+              Plaster on the walls
+            </label>
+            {cm.plaster && (
+              <>
+                <div className="row">
+                  <LengthInput id="plaster-mm" label="Plaster thickness" size="small" unit={unit} valueMm={cm.plasterMm} min={1} max={100} onChange={(plasterMm) => set({ cement: { ...cm, plasterMm } })} />
+                  <NumField id="plaster-mix" label="Plaster mix  1 :" value={cm.plasterMix} onChange={(plasterMix) => set({ cement: { ...cm, plasterMix: Math.max(1, plasterMix) } })} />
+                </div>
+                <label className="check-row">
+                  <input type="checkbox" checked={cm.plasterOutside} onChange={(e) => set({ cement: { ...cm, plasterOutside: e.target.checked } })} />
+                  Outside walls of the house too
+                </label>
+              </>
+            )}
+            <label className="check-row">
+              <input type="checkbox" checked={cm.tileBed} onChange={(e) => set({ cement: { ...cm, tileBed: e.target.checked } })} />
+              Bed under the floor tiles
+            </label>
+            {cm.tileBed && (
+              <div className="row">
+                <LengthInput id="bed-mm" label="Bed thickness" size="small" unit={unit} valueMm={cm.tileBedMm} min={1} max={200} onChange={(tileBedMm) => set({ cement: { ...cm, tileBedMm } })} />
+                <NumField id="bed-mix" label="Bed mix  1 :" value={cm.tileBedMix} onChange={(tileBedMix) => set({ cement: { ...cm, tileBedMix: Math.max(1, tileBedMix) } })} />
+              </div>
+            )}
+            <div className="est-result" aria-label="Cement bags">
+              {cement.rows.length === 0 ? (
+                <p className="hint">Nothing to count yet.</p>
+              ) : (
+                <table>
+                  <tbody>
+                    {cement.rows.map((r) => (
+                      <tr key={r.part}>
+                        <td>{r.part}</td>
+                        <td className="muted">{r.note}</td>
+                        <td className="num">{r.bags.toFixed(1)} bags</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="est-total">
+                <span>
+                  {count(cement.bags)} bags × {money(cm.price, cur)}
+                </span>
+                <strong data-testid="cement-cost">{money(cement.cost, cur)}</strong>
+              </div>
+            </div>
+          </>
+        ) : tab === 'paint' ? (
+          <>
+            <div className="row">
+              <NumField id="paint-price" label="Price of 1 litre" prefix={cur} value={pt.price} onChange={(price) => set({ paint: { ...pt, price } })} />
+              <NumField id="paint-coats" label="Coats" value={pt.coats} onChange={(coats) => set({ paint: { ...pt, coats: Math.max(1, Math.round(coats)) } })} />
+            </div>
+            <NumField
+              id="paint-cover"
+              label="1 litre covers (one coat)"
+              suffix={unit === 'ft' ? 'sq ft' : 'm²'}
+              value={unit === 'ft' ? Math.round(pt.coverageM2 * SQFT) : pt.coverageM2}
+              onChange={(v) => set({ paint: { ...pt, coverageM2: unit === 'ft' ? v / SQFT : v } })}
+            />
+            <p className="hint">The tin usually says how much one litre covers.</p>
+            <label className="check-row">
+              <input type="checkbox" checked={pt.ceiling} onChange={(e) => set({ paint: { ...pt, ceiling: e.target.checked } })} />
+              Ceilings
+            </label>
+            <label className="check-row">
+              <input type="checkbox" checked={pt.outside} onChange={(e) => set({ paint: { ...pt, outside: e.target.checked } })} />
+              Outside walls of the house
+            </label>
+            <p className="hint">Inside walls up to the ceiling, both sides of walls between rooms and of inner walls. Doors and windows are taken out.</p>
+            <div className="est-result" aria-label="Paint">
+              {paint.rows.length === 0 ? (
+                <p className="hint">Nothing to paint yet.</p>
+              ) : (
+                <table>
+                  <tbody>
+                    {paint.rows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{multi ? `${r.floor} · ${r.part}` : r.part}</td>
+                        <td className="num">{areaText(r.areaMm2, unit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="est-total">
+                <span>
+                  {paint.litres.toFixed(1)} L ({pt.coats} coat{pt.coats === 1 ? '' : 's'}) × {money(pt.price, cur)}
+                </span>
+                <strong data-testid="paint-cost">{money(paint.cost, cur)}</strong>
               </div>
             </div>
           </>
@@ -241,13 +359,13 @@ export function EstimateDialog({ layout, unit, multi, onChange, onClose }: Props
         )}
 
         <div className="est-grand">
-          <span>
-            Bricks {money(bricks.cost, cur)} + Tiles {money(tiles.cost, cur)}
+          <span className="est-grand-parts">
+            Bricks {money(bricks.cost, cur)} · Cement {money(cement.cost, cur)} · Paint {money(paint.cost, cur)} · Tiles {money(tiles.cost, cur)}
           </span>
-          <strong data-testid="total-cost">{money(bricks.cost + tiles.cost, cur)}</strong>
+          <strong data-testid="total-cost">{money(total, cur)}</strong>
         </div>
         <div className="est-foot">
-          <p className="hint">Prices are examples until you change them. Mortar, cement and labour are not included.</p>
+          <p className="hint">Prices are examples until you change them. Sand and labour are not included.</p>
           <button className="btn btn-ghost" onClick={() => onChange({ ...defaultEstimate(unit), currency: cur })}>
             <RotateCcw size={15} /> Reset to defaults
           </button>

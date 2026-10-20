@@ -13,7 +13,17 @@ export interface ShareResult {
 /** Put a plan inside a link. `layoutId` = share only that layout, null = the whole home. */
 export function makeShareLink(home: Home, layoutId: string | null, origin = window.location.origin + window.location.pathname): ShareResult {
   const layouts = (layoutId ? home.layouts.filter((l) => l.id === layoutId) : home.layouts).map(({ view: _view, ...l }) => l);
-  const payload = { v: 1, home: { name: home.name, kind: home.kind, layouts } };
+  const payload = {
+    v: 1,
+    home: {
+      name: home.name,
+      kind: home.kind,
+      layouts,
+      // roommates: who is who, and which home this came from (to bring their things back)
+      ...(home.people?.length ? { people: home.people, originId: home.originId ?? home.id } : {}),
+      ...(home.people?.length && home.meId ? { meId: home.meId } : {}),
+    },
+  };
   const data = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
   const url = `${origin.replace(/\/$/, '')}/#/s/${data}`;
   return { url, tooBig: url.length > MAX_LINK_LENGTH };

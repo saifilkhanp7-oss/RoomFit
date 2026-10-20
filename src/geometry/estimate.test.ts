@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeFloor, makeRoom } from '../model/defaults';
-import { brickReport, bricksFor, estimateOf, sanitizeEstimate, tileReport } from './estimate';
+import { brickReport, bricksFor, cementReport, estimateOf, paintReport, sanitizeEstimate, tileReport } from './estimate';
 import { buildWalls, unionVolume } from './wallPieces';
 import { DOOR_HEIGHT } from './walls';
 import type { Floor, Item, Opening } from '../model/types';
@@ -80,5 +80,48 @@ describe('tiles', () => {
     expect(e.brick.price).toBe(12);
     expect(e.rooms.abc.mode).toBe('own');
     expect(e.rooms.bad).toBeUndefined();
+  });
+});
+
+describe('inner walls, paint, cement', () => {
+  const room = () => ({ ...makeFloor('F'), outerWallMm: t, rooms: [makeRoom('Room', W, L, 0, 0)] }) as Floor;
+  it('inner walls add bricks; a wall above a cupboard only counts its part', () => {
+    const f = room();
+    const full = { ...f, partitions: [{ id: 'p', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 0 }] };
+    const r = brickReport([full], estimateOf());
+    const inner = r.parts.find((p) => p.part === 'Inner walls')!;
+    expect(inner.volMm3).toBeCloseTo(2000 * 114 * H);
+    const high = { ...f, partitions: [{ id: 'p', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 2134 }] };
+    expect(brickReport([high], estimateOf()).parts.find((p) => p.part === 'Inner walls')!.volMm3).toBeCloseTo(2000 * 114 * (H - 2134));
+  });
+  it('a wall on the floor takes tiles away; a hanging one does not', () => {
+    const f = room();
+    const est = estimateOf({ tileWastePct: 0 });
+    const base = tileReport([f], est).areaMm2;
+    const on = { ...f, partitions: [{ id: 'p', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 0 }] };
+    const up = { ...f, partitions: [{ id: 'p', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 2000 }] };
+    expect(tileReport([on], est).areaMm2).toBeCloseTo(base - 2000 * 114);
+    expect(tileReport([up], est).areaMm2).toBeCloseTo(base);
+  });
+  it('paint: inside walls up to the ceiling, without the door; inner walls on both sides', () => {
+    const f = room();
+    const door: Opening = { id: 'd', roomId: f.rooms[0].id, kind: 'door', side: 'top', offsetMm: 500, widthMm: 900, doorType: 'swing' } as unknown as Opening;
+    const est = estimateOf({ paint: { coats: 1, coverageM2: 10, price: 100, ceiling: false, outside: false } });
+    const r = paintReport([{ ...f, openings: [door] }], est);
+    expect(r.areaMm2).toBeCloseTo(2 * (W + L) * H - 900 * DOOR_HEIGHT);
+    const withWall = paintReport([{ ...f, partitions: [{ id: 'p', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 0 }] }], est);
+    expect(withWall.areaMm2 - paintReport([f], est).areaMm2).toBeCloseTo(2 * 2000 * H);
+    expect(r.litres).toBeCloseTo(Math.ceil((r.areaMm2 / 1e6 / 10) * 10) / 10);
+    expect(r.cost).toBeCloseTo(r.litres * 100);
+  });
+  it('cement: bags for mortar, plaster and tile bed', () => {
+    const r = cementReport([room()], estimateOf());
+    expect(r.rows.map((x) => x.part)).toEqual(['Brick mortar', 'Plaster', 'Under tiles']);
+    // ~10.5 m³ of brickwork with 10 mm joints: about 2 m³ of mortar → ~13 bags at 1:6
+    const mortar = r.rows[0].bags;
+    expect(mortar).toBeGreaterThan(8);
+    expect(mortar).toBeLessThan(25);
+    expect(r.cost).toBe(r.bags * 420);
+    expect(cementReport([room()], estimateOf({ cement: { ...estimateOf().cement, plaster: false, tileBed: false } })).rows).toHaveLength(1);
   });
 });

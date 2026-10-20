@@ -9,6 +9,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { useResolvedTheme } from '../hooks/useTheme';
 import { useAppStore } from '../store/useAppStore';
 import { cloneHomeFresh, uniqueName } from '../model/defaults';
+import { mergeRoommateThings } from '../model/ops';
 import { useToast } from '../components/Toast';
 import type { LayoutView } from '../model/types';
 import { useAuth } from '../auth/useAuth';
@@ -53,12 +54,28 @@ export function SharedViewer({ data }: { data: string }) {
     if (!useAuth.getState().user) return setAskLogin(true);
     const { data: appData, addHomes } = useAppStore.getState();
     const copy = cloneHomeFresh(home, uniqueName(home.name, appData.homes.map((h) => h.name)));
+    delete copy.meId; // whoever saves the copy picks who they are
     const [added] = addHomes([copy], 'copy');
     toast('Saved to your homes');
     navigate(`/edit/${added.id}/${added.layouts[Math.min(layoutIdx, added.layouts.length - 1)].id}`, true);
   };
 
   const floorBelow = floorIdx > 0 ? layout.floors[floorIdx - 1] : undefined;
+
+  // A roommate's copy of one of my homes: offer to bring their things into mine.
+  const myHomes = useAppStore.getState().data.homes;
+  const origin = home.originId ?? home.id;
+  const mine = user ? myHomes.find((h) => h.id === origin || (h.originId && h.originId === origin)) : undefined;
+  // not my own link coming back to me
+  const them = home.meId && home.meId !== mine?.meId ? home.people?.find((p) => p.id === home.meId) : undefined;
+  const bringIn = () => {
+    if (!mine || !them) return;
+    const { home: merged, count } = mergeRoommateThings(mine, home, them.id);
+    const S = useAppStore.getState();
+    S.patchHome(mine.id, () => merged);
+    toast(`Brought in ${count} of ${them.name}'s thing${count === 1 ? '' : 's'}`);
+    navigate(`/edit/${mine.id}/${mine.layouts[0].id}`, true);
+  };
 
   return (
     <div className="editor">
@@ -75,7 +92,18 @@ export function SharedViewer({ data }: { data: string }) {
         </button>
         <ThemeToggle />
       </header>
-      <div className="shared-banner">This is a shared plan. Save a copy to edit it.</div>
+      {mine && them ? (
+        <div className="shared-banner roommate-banner">
+          <span>
+            <strong>{them.name}</strong> sent their things for <strong>{mine.name}</strong>.
+          </span>
+          <button className="btn btn-primary" onClick={bringIn}>
+            Bring in {them.name}'s things
+          </button>
+        </div>
+      ) : (
+        <div className="shared-banner">This is a shared plan. Save a copy to edit it.</div>
+      )}
       {askLogin && !user && <AuthScreen embedded onDone={() => setAskLogin(false)} />}
       {(home.layouts.length > 1 || layout.floors.length > 1) && (
         <nav className="floor-tabs" aria-label="Layouts and floors">
@@ -111,7 +139,7 @@ export function SharedViewer({ data }: { data: string }) {
               sizeRef.current = { w, h };
               if (!view && floor) setView(fitView(floorBounds(floor), w, h, floor.id, { top: 40, right: 32, bottom: 80, left: 48 }));
             }}
-            draw={{ floor, floorBelow, colors: PALETTES[theme], unit, showGrid: true, showDims: true, clean: true }}
+            draw={{ floor, floorBelow, colors: PALETTES[theme], unit, showGrid: true, showDims: true, clean: true, people: home.people }}
           />
           <div className="zoom-controls" style={{ bottom: 'calc(16px + var(--safe-bottom))' }}>
             <button className="icon-btn" aria-label="Fit plan to screen" onClick={fit}>

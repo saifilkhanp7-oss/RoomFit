@@ -1,4 +1,4 @@
-import type { Floor, Unit } from '../model/types';
+import type { Floor, Unit, Person } from '../model/types';
 import { drawPlan, PALETTES } from '../editor/canvas/draw';
 import { itemPoly } from '../geometry/items';
 import { floorBounds } from '../geometry/view';
@@ -11,7 +11,7 @@ const MARGIN = 44;
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 /** Render one floor to a PNG (light theme, no selection or warning colours). */
-export async function floorToPng(opts: { floor: Floor; floorBelow?: Floor; title: string; subtitle: string; unit: Unit; showDims: boolean }): Promise<Blob> {
+export async function floorToPng(opts: { floor: Floor; floorBelow?: Floor; title: string; subtitle: string; unit: Unit; showDims: boolean; people?: Person[] }): Promise<Blob> {
   const { floor } = opts;
   const b = floorBounds(floor) ?? { minX: 0, minY: 0, maxX: 4000, maxY: 3000 };
   // include furniture or stair openings that stick out of the rooms
@@ -51,6 +51,7 @@ export async function floorToPng(opts: { floor: Floor; floorBelow?: Floor; title
     showGrid: true,
     showDims: opts.showDims,
     clean: true,
+    people: opts.people,
   });
 
   // header

@@ -320,7 +320,7 @@ export function CustomItemDialog(props: {
         </div>
         <label className="check-row">
           <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-          Save to "My items" to use again
+          Add to "My things" to use again in any home
         </label>
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={props.onClose}>
@@ -574,6 +574,7 @@ export function ExportDialog(props: { home: Home; layout: Layout; floorId: strin
           subtitle: home.kind === 'multi' ? `${layout.name} · ${f.name}` : layout.name,
           unit: props.unit,
           showDims: props.showDims,
+          people: home.people,
         });
         const safe = `${home.name}-${layout.name}${home.kind === 'multi' ? '-' + f.name : ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase();
         const r = await shareOrDownload(blob, `${safe || 'roomfit'}.png`, `${home.name} – ${f.name}`);

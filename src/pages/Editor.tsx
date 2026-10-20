@@ -3,8 +3,15 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   AlertTriangle, ArrowLeft, Box, ChevronDown, Copy, DoorOpen, Grid3x3, Image as ImageIcon, Layers, Maximize, Minus,
   MoreHorizontal, Pencil, Plus, Redo2, RotateCcw, RotateCw, Ruler, Settings as SettingsIcon, Share2, Sofa, SquarePlus,
-  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine, Calculator,
+  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine, Calculator, BrickWall, Route, PackageOpen, Users,
 } from 'lucide-react';
+import { MyThingsDialog } from '../editor/MyThingsDialog';
+import { RoommatesDialog } from '../editor/RoommatesDialog';
+import { checkRoute, type RouteResult } from '../geometry/route';
+import { PartitionPanel } from '../editor/panels/PartitionPanel';
+import { ZonePanel } from '../editor/panels/ZonePanel';
+import { hitPartition, PARTITION_DEFAULT, partitionPoly, straighten } from '../geometry/partitions';
+import type { RouteDrawing } from '../editor/canvas/draw';
 import { EstimateDialog } from '../editor/EstimateDialog';
 import { canRedo, canUndo, findHome, useAppStore } from '../store/useAppStore';
 import { navigate } from '../router';
@@ -31,10 +38,10 @@ import { computeWarnings, roomOfPoint, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warn
 import { rotationFacingWall, snapItemBox, snapRoom, type Guide } from '../geometry/snapping';
 import { snapMeasurePoint } from '../geometry/measure';
 import * as ops from '../model/ops';
-import { itemElevation, itemMount, itemSpan } from '../model/catalog';
+import { isStairs, itemElevation, itemHeight, itemMount, itemSpan } from '../model/catalog';
 import { id as newId } from '../model/defaults';
 import { MM_PER_FOOT, MM_PER_INCH } from '../model/units';
-import type { Floor, Item, LayoutView, Side } from '../model/types';
+import type { Floor, Item, LayoutView, Partition, Side, Zone } from '../model/types';
 import { AccountDialog } from '../auth/AccountDialog';
 import { useAuth } from '../auth/useAuth';
 import { byDepth, kindOf, ROOM_KINDS } from '../geometry/spaces';
@@ -43,8 +50,8 @@ import './Editor.css';
 
 const View3D = lazy(() => import('../three/View3D'));
 
-type Mode = 'select' | 'measure' | 'door' | 'window';
-type Sheet = null | 'hall' | 'makeMulti' | 'addFloorMenu' | 'account' | 'add' | 'props' | 'warnings' | 'rooms' | 'addRoom' | 'custom' | 'layouts' | 'share' | 'export' | 'more' | 'settings' | 'floorMenu' | 'deleteRoom' | 'estimate';
+type Mode = 'select' | 'measure' | 'door' | 'window' | 'wall' | 'zone';
+type Sheet = null | 'hall' | 'makeMulti' | 'addFloorMenu' | 'account' | 'add' | 'props' | 'warnings' | 'rooms' | 'addRoom' | 'custom' | 'layouts' | 'share' | 'export' | 'more' | 'settings' | 'floorMenu' | 'deleteRoom' | 'estimate' | 'mythings' | 'roommates';
 
 // Carry zoom + floor over when switching layouts, so "Layout A" vs "Layout B" compare at the same spot.
 const carry: { view?: LayoutView; floorIndex?: number } = {};
@@ -78,6 +85,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const layout = home.layouts.find((l) => l.id === layoutId)!;
   const settings = useAppStore((s) => s.data.settings);
   const templates = useAppStore((s) => s.data.customItemTemplates);
+  const allHomes = useAppStore((s) => s.data.homes);
   const lastOpened = useAppStore((s) => s.data.lastOpened);
   useAppStore((s) => s.histVersion); // re-render undo/redo buttons
   const S = useAppStore.getState();
@@ -126,12 +134,17 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const selItem = selection?.kind === 'item' ? floor.items.find((i) => i.id === selection.id) : undefined;
   const selOpening = selection?.kind === 'opening' ? floor.openings.find((o) => o.id === selection.id) : undefined;
   const selRoom = selection?.kind === 'room' ? floor.rooms.find((r) => r.id === selection.id) : undefined;
-  const sel: Selection = selItem || selOpening || selRoom ? selection : null;
+  const selWall = selection?.kind === 'partition' ? floor.partitions?.find((p) => p.id === selection.id) : undefined;
+  const selZone = selection?.kind === 'zone' ? floor.zones?.find((z) => z.id === selection.id) : undefined;
+  const sel: Selection = selItem || selOpening || selRoom || selWall || selZone ? selection : null;
+  const people = home.people ?? [];
+  const [zonePerson, setZonePerson] = useState<string | null>(null);
+  const [route, setRoute] = useState<RouteDrawing | null>(null);
 
   const warnings = useMemo(
-    () => computeWarnings(floor, { floorBelow, settings, unit, heights, stairRiseMm: floorIndex < layout.floors.length - 1 ? floorHeight(floor) : undefined }),
+    () => computeWarnings(floor, { floorBelow, settings, unit, heights, people: home.people, stairRiseMm: floorIndex < layout.floors.length - 1 ? floorHeight(floor) : undefined }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [floor, floorBelow, settings.minWalkMm, settings.fanClearanceMm, unit, heights, floorIndex, layout.floors.length],
+    [floor, floorBelow, settings.minWalkMm, settings.fanClearanceMm, unit, heights, floorIndex, layout.floors.length, home.people],
   );
   const redCount = warnings.list.filter((w) => w.level === 'red').length;
 
@@ -230,7 +243,33 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
         },
       };
     }
+    if (mode === 'wall' || mode === 'zone') {
+      const a = mode === 'wall' ? snapMeasurePoint(f, p, 14 / zoom) : roundPt(p);
+      let b: Pt | null = null;
+      return {
+        move: (x, y) => {
+          const q = world(x, y);
+          b = mode === 'wall' ? straighten(a, snapMeasurePoint(floorRef.current, q, 14 / viewRef.current!.zoom)) : roundPt(q);
+          setDraft({ a, b });
+        },
+        end: (moved) => {
+          if (moved && b) {
+            if (mode === 'wall') addWall(a, b);
+            else addZoneRect(a, b);
+          }
+        },
+      };
+    }
     if (mode !== 'select') return null;
+
+    // ends of the selected inner wall, corner of the selected space
+    if (selWall) {
+      for (const end of ['a', 'b'] as const) {
+        const e = selWall[end];
+        if (Math.hypot(p.x - e.x, p.y - e.y) < 18 / zoom) return wallEndSession(selWall.id, end);
+      }
+    }
+    if (selZone && Math.hypot(p.x - (selZone.x + selZone.width), p.y - (selZone.y + selZone.length)) < 18 / zoom) return zoneResizeSession(selZone.id);
 
     // rotation handle of the selected item
     const cur = selection?.kind === 'item' ? f.items.find((i) => i.id === selection.id) : undefined;
@@ -244,6 +283,10 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
 
     const op = hitOpening(p);
     if (op) return openingSession(op.id, p);
+
+    const pw = hitPartition(f, p, 8 / zoom);
+    if (pw) return wallMoveSession(pw.id, p);
+    if (selZone && inZone(selZone, p)) return zoneMoveSession(selZone.id, p);
 
     if (selection?.kind === 'room' && f.rooms.length > 1) {
       const r = f.rooms.find((x) => x.id === selection.id);
@@ -359,6 +402,91 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     };
   };
 
+  // ---------- inner walls & roommates' spaces ----------
+  const roundPt = (q: Pt): Pt => ({ x: Math.round(q.x), y: Math.round(q.y) });
+  const inZone = (zn: { x: number; y: number; width: number; length: number }, q: Pt) => q.x >= zn.x && q.x <= zn.x + zn.width && q.y >= zn.y && q.y <= zn.y + zn.length;
+  const addWall = (a: Pt, b: Pt) => {
+    setDraft(null);
+    if (Math.hypot(b.x - a.x, b.y - a.y) < 150) return toast('Too short. Drag a longer line.');
+    const pw: Partition = { id: newId(), a: roundPt(a), b: roundPt(b), thicknessMm: PARTITION_DEFAULT, bottomMm: 0 };
+    edit((f) => ops.addPartition(f, pw));
+    setMode('select');
+    setSelection({ kind: 'partition', id: pw.id });
+    toast('Wall added. Set its height in its settings.');
+  };
+  const addZoneRect = (a: Pt, b: Pt) => {
+    setDraft(null);
+    const person = zonePerson ?? people[0]?.id;
+    if (!person) return;
+    const zn: Zone = { id: newId(), personId: person, x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), length: Math.abs(b.y - a.y) };
+    if (zn.width < 300 || zn.length < 300) return toast('Too small. Drag across the space.');
+    edit((f) => ops.addZone(f, zn));
+    setMode('select');
+    setSelection({ kind: 'zone', id: zn.id });
+    toast(`${people.find((x) => x.id === person)?.name ?? 'Their'}'s space added`);
+  };
+  const dragSession = (apply: (q: Pt) => void, onEnd?: () => void): DragSession => {
+    let started = false;
+    return {
+      move: (sx, sy) => {
+        if (!started) {
+          started = true;
+          S.checkpoint(homeId, layoutId);
+          setDragging(true);
+        }
+        apply(world(sx, sy));
+      },
+      end: () => {
+        setDragging(false);
+        onEnd?.();
+      },
+    };
+  };
+  const wallMoveSession = (pid: string, p0: Pt) => {
+    const w0 = floorRef.current.partitions!.find((x) => x.id === pid)!;
+    return dragSession((q) => {
+      setSelection({ kind: 'partition', id: pid });
+      const dx = Math.round(q.x - p0.x);
+      const dy = Math.round(q.y - p0.y);
+      edit((f) => ops.updatePartition(f, pid, { a: { x: w0.a.x + dx, y: w0.a.y + dy }, b: { x: w0.b.x + dx, y: w0.b.y + dy } }), { history: false });
+    });
+  };
+  const wallEndSession = (pid: string, end: 'a' | 'b') => {
+    const w0 = floorRef.current.partitions!.find((x) => x.id === pid)!;
+    const other = end === 'a' ? w0.b : w0.a;
+    return dragSession((q) => {
+      const s = straighten(other, snapMeasurePoint(floorRef.current, q, 14 / viewRef.current!.zoom));
+      edit((f) => ops.updatePartition(f, pid, { [end]: roundPt(s) }), { history: false });
+    });
+  };
+  const zoneMoveSession = (zid: string, p0: Pt) => {
+    const z0 = floorRef.current.zones!.find((x) => x.id === zid)!;
+    return dragSession((q) => edit((f) => ops.updateZone(f, zid, { x: Math.round(z0.x + q.x - p0.x), y: Math.round(z0.y + q.y - p0.y) }), { history: false }));
+  };
+  const zoneResizeSession = (zid: string) => {
+    const z0 = floorRef.current.zones!.find((x) => x.id === zid)!;
+    return dragSession((q) => edit((f) => ops.updateZone(f, zid, { width: Math.max(300, Math.round(q.x - z0.x)), length: Math.max(300, Math.round(q.y - z0.y)) }), { history: false }));
+  };
+
+  // ---------- will it get in? ----------
+  const [routeInfo, setRouteInfo] = useState<{ itemId: string; result: RouteResult; furniture: boolean } | null>(null);
+  const runRoute = (it: Item, furniture = false) => {
+    const result = checkRoute(layout.floors, floorIndex, it, { furniture, fmt: (mm) => formatLength(mm, unit) });
+    setRoute({ ok: result.ok, steps: result.steps });
+    setRouteInfo({ itemId: it.id, result, furniture });
+    if (!wide) setSheet(null);
+  };
+  const closeRoute = () => {
+    setRoute(null);
+    setRouteInfo(null);
+  };
+  useEffect(() => {
+    if (routeInfo && (selection?.kind !== 'item' || selection.id !== routeInfo.itemId)) closeRoute();
+  }, [selection]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (routeInfo) closeRoute();
+  }, [floor.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ---------- taps ----------
   const onTap = (sx: number, sy: number) => {
     if (!viewRef.current) return;
@@ -379,10 +507,22 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       addOpeningAt(p, mode);
       return;
     }
+    if (mode === 'wall' || mode === 'zone') {
+      const q = mode === 'wall' ? snapMeasurePoint(f, p, 14 / zoom) : roundPt(p);
+      if (!draft) setDraft({ a: q });
+      else if (mode === 'wall') addWall(draft.a, straighten(draft.a, q));
+      else addZoneRect(draft.a, q);
+      return;
+    }
     const it = hitItem(p);
     if (it) return setSelection({ kind: 'item', id: it.id });
     const op = hitOpening(p);
     if (op) return setSelection({ kind: 'opening', id: op.id });
+    const pw = hitPartition(f, p, 8 / zoom);
+    if (pw) return setSelection({ kind: 'partition', id: pw.id });
+    // a space is picked first; tap it again to get the room under it
+    const zn = [...(f.zones ?? [])].reverse().find((x) => inZone(x, p));
+    if (zn && !(selection?.kind === 'zone' && selection.id === zn.id)) return setSelection({ kind: 'zone', id: zn.id });
     const room = roomOfPoint(f, p);
     setSelection(room ? { kind: 'room', id: room.id } : null);
   };
@@ -428,7 +568,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     const src =
       pk.kind === 'catalog'
         ? { type: pk.entry.type, label: pk.entry.label, width: pk.entry.width, depth: pk.entry.depth, shape: pk.entry.shape, color: pk.entry.color, mount: pk.entry.mount, heightMm: undefined as number | undefined }
-        : { type: 'custom', label: pk.t.label, width: pk.t.width, depth: pk.t.depth, shape: pk.t.shape, color: pk.t.color, mount: undefined, heightMm: pk.t.heightMm };
+        : { type: pk.t.type || 'custom', label: pk.t.label, width: pk.t.width, depth: pk.t.depth, shape: pk.t.shape, color: pk.t.color, mount: undefined, heightMm: pk.t.heightMm };
     const v = viewRef.current!;
     const { w, h } = sizeRef.current;
     let pos = at ?? screenToWorld(v, w / 2, h / 2);
@@ -457,6 +597,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       color: src.color,
       ...(src.mount ? { mount: src.mount } : {}),
       ...(src.heightMm ? { heightMm: src.heightMm } : {}),
+      ...(home.meId && src.type !== 'stairs' ? { owner: home.meId } : {}),
     };
     if (item.type === 'stairs') item.stairs = { style: 'straight', flightWidthMm: 914, turn: 'right', upDir: 0 };
 
@@ -504,6 +645,8 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const deleteSelected = () => {
     if (selItem) edit((f) => ops.deleteItem(f, selItem.id));
     else if (selOpening) edit((f) => ops.deleteOpening(f, selOpening.id));
+    else if (selWall) edit((f) => ops.deletePartition(f, selWall.id));
+    else if (selZone) edit((f) => ops.deleteZone(f, selZone.id));
     else if (selRoom && floor.rooms.length > 1) return setSheet('deleteRoom');
     else return;
     setSelection(null);
@@ -623,6 +766,8 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       const r = floor.rooms.find((x) => x.id === selOpening.roomId);
       if (r) poly = openingGeom(floor, r, selOpening).cut;
     } else if (selRoom) poly = [{ x: selRoom.x, y: selRoom.y }, { x: selRoom.x + selRoom.width, y: selRoom.y }];
+    else if (selWall) poly = partitionPoly(selWall);
+    else if (selZone) poly = [{ x: selZone.x, y: selZone.y }, { x: selZone.x + selZone.width, y: selZone.y }];
     if (!poly) return null;
     const xs = poly.map((p) => p.x * view.zoom + view.panX);
     const ys = poly.map((p) => p.y * view.zoom + view.panY);
@@ -649,11 +794,22 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
           support={selSupport}
           onStack={() => selSupport && stackSelected(selSupport)}
           onFloor={() => edit((f) => ops.putOnFloor(f, selItem.id))}
+          people={people}
+          onRoute={itemMount(selItem) === 'floor' && !isStairs(selItem) ? () => runRoute(selItem) : undefined}
           onSaveTemplate={
-            selItem.type === 'custom' && !templates.some((t) => t.label === selItem.label && t.width === selItem.width && t.depth === selItem.depth)
+            !isStairs(selItem) && !templates.some((t) => t.label === selItem.label && t.width === selItem.width && t.depth === selItem.depth)
               ? () => {
-                  S.addTemplate({ id: newId(), type: 'custom', label: selItem.label, width: selItem.width, depth: selItem.depth, heightMm: selItem.heightMm, shape: selItem.shape, color: selItem.color });
-                  toast('Saved to My items');
+                  S.addTemplate({
+                    id: newId(),
+                    type: selItem.type,
+                    label: selItem.label,
+                    width: selItem.width,
+                    depth: selItem.depth,
+                    heightMm: itemHeight(selItem),
+                    shape: selItem.shape,
+                    color: selItem.color,
+                  });
+                  toast('Added to My things');
                 }
               : undefined
           }
@@ -667,6 +823,19 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
           unit={unit}
           heights={heights}
           onChange={(patch) => edit((f) => ops.updateOpening(f, selOpening.id, patch))}
+          onDelete={deleteSelected}
+        />
+      );
+    if (selWall)
+      return <PartitionPanel wall={selWall} floor={floor} unit={unit} onChange={(patch) => edit((f) => ops.updatePartition(f, selWall.id, patch))} onDelete={deleteSelected} />;
+    if (selZone)
+      return (
+        <ZonePanel
+          zone={selZone}
+          people={people}
+          unit={unit}
+          items={floor.items}
+          onChange={(patch) => edit((f) => ops.updateZone(f, selZone.id, patch))}
           onDelete={deleteSelected}
         />
       );
@@ -686,13 +855,41 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       );
     return null;
   };
-  const selTitle = selItem ? selItem.label : selOpening ? (selOpening.kind === 'door' ? 'Door' : 'Window') : selRoom ? selRoom.name : '';
+  const selTitle = selItem
+    ? selItem.label
+    : selOpening
+      ? selOpening.kind === 'door'
+        ? 'Door'
+        : 'Window'
+      : selWall
+        ? 'Inner wall'
+        : selZone
+          ? `${people.find((x) => x.id === selZone.personId)?.name ?? 'Someone'}'s space`
+          : selRoom
+            ? selRoom.name
+            : '';
 
   const scaleLabel = unit === 'ft' ? '1 square = 1 ft' : '1 square = 50 cm';
   const scalePx = view ? (unit === 'ft' ? MM_PER_FOOT : 500) * view.zoom : 0;
 
   const modeText =
-    mode === 'door' ? 'Tap a wall to add a door' : mode === 'window' ? 'Tap a wall to add a window' : mode === 'measure' ? (draft ? 'Tap the second point' : 'Tap two points, or drag, to measure') : '';
+    mode === 'door'
+      ? 'Tap a wall to add a door'
+      : mode === 'window'
+        ? 'Tap a wall to add a window'
+        : mode === 'measure'
+          ? draft
+            ? 'Tap the second point'
+            : 'Tap two points, or drag, to measure'
+          : mode === 'wall'
+            ? draft
+              ? 'Tap where the wall ends'
+              : 'Drag where the wall goes, or tap its two ends'
+            : mode === 'zone'
+              ? draft
+                ? 'Tap the opposite corner'
+                : `Drag across ${people.find((x) => x.id === (zonePerson ?? people[0]?.id))?.name ?? 'their'}'s space`
+              : '';
 
   return (
     <div className="editor">
@@ -783,6 +980,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               onDrop={onDropTile}
               onCustom={() => setSheet('custom')}
               onDeleteTemplate={S.deleteTemplate}
+              onMyThings={() => setSheet('mythings')}
             />
           </aside>
         )}
@@ -809,7 +1007,11 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                 selection: sel,
                 warnings,
                 measurements,
-                measureDraft: draft,
+                measureDraft: mode === 'measure' ? draft : null,
+                wallDraft: mode === 'wall' ? draft : null,
+                zoneDraft: mode === 'zone' && draft ? { ...draft, color: people.find((x) => x.id === (zonePerson ?? people[0]?.id))?.color ?? '#888' } : null,
+                people,
+                route,
                 guides,
               }}
             />
@@ -849,6 +1051,30 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               </button>
             </div>
           )}
+          {routeInfo && (
+            <div className={`route-banner ${routeInfo.result.ok ? 'ok' : 'no'}`} role="status">
+              <p>
+                <strong>{routeInfo.result.ok ? '✓ ' : '✗ '}</strong>
+                {routeInfo.result.message}
+              </p>
+              <div className="route-actions">
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={routeInfo.furniture}
+                    onChange={(e) => {
+                      const it = floor.items.find((x) => x.id === routeInfo.itemId);
+                      if (it) runRoute(it, e.target.checked);
+                    }}
+                  />
+                  Other furniture is in the way
+                </label>
+                <button className="btn btn-primary" onClick={closeRoute}>
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
           {mode === 'select' && measurements.length > 0 && (
             <button className="btn clear-measure" onClick={() => setMeasurements([])}>
               <X size={16} /> Clear measurements
@@ -877,6 +1103,11 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                   <ArrowDownToLine size={19} />
                 </button>
               )}
+              {selItem && itemMount(selItem) === 'floor' && !isStairs(selItem) && (
+                <button className="icon-btn" aria-label="Will it get in?" title="Will it get in?" onClick={() => runRoute(selItem)}>
+                  <Route size={19} />
+                </button>
+              )}
               {selItem && (
                 <button className="icon-btn" aria-label="Duplicate" onClick={duplicate}>
                   <Copy size={19} />
@@ -887,7 +1118,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                   <Pencil size={19} />
                 </button>
               )}
-              {(selItem || selOpening || (selRoom && floor.rooms.length > 1)) && (
+              {(selItem || selOpening || selWall || selZone || (selRoom && floor.rooms.length > 1)) && (
                 <button className="icon-btn danger" aria-label="Delete" onClick={deleteSelected}>
                   <Trash2 size={19} />
                 </button>
@@ -925,6 +1156,18 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             <button className={`tool-btn${mode === 'window' ? ' on' : ''}`} aria-pressed={mode === 'window'} onClick={() => setMode(mode === 'window' ? 'select' : 'window')}>
               <AppWindow size={20} />
               <span>Window</span>
+            </button>
+            <button
+              className={`tool-btn${mode === 'wall' ? ' on' : ''}`}
+              aria-pressed={mode === 'wall'}
+              onClick={() => {
+                setMode(mode === 'wall' ? 'select' : 'wall');
+                setDraft(null);
+                setSelection(null);
+              }}
+            >
+              <BrickWall size={20} />
+              <span>Wall</span>
             </button>
             <button
               className={`tool-btn${mode === 'measure' ? ' on' : ''}`}
@@ -976,7 +1219,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       {/* ---------- sheets & dialogs ---------- */}
       {sheet === 'add' && (
         <Dialog title="Add furniture" subtitle="Tap an item to put it on the plan." onClose={() => setSheet(null)}>
-          <FurniturePanel multi={multi} unit={unit} templates={templates} onPick={(p) => addPickable(p)} onCustom={() => setSheet('custom')} onDeleteTemplate={S.deleteTemplate} />
+          <FurniturePanel multi={multi} unit={unit} templates={templates} onPick={(p) => addPickable(p)} onCustom={() => setSheet('custom')} onDeleteTemplate={S.deleteTemplate} onMyThings={() => setSheet('mythings')} />
         </Dialog>
       )}
       {sheet === 'props' && sel && (
@@ -1189,6 +1432,78 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       )}
       {sheet === 'export' && <ExportDialog home={home} layout={layout} floorId={floor.id} unit={unit} showDims={settings.showDims} onClose={() => setSheet(null)} />}
       {sheet === 'settings' && <SettingsDialog onClose={() => setSheet(null)} />}
+      {sheet === 'roommates' && (
+        <RoommatesDialog
+          home={home}
+          floor={floor}
+          onPeople={(people, meId) =>
+            S.patchHome(homeId, (h) => {
+              const next = { ...h, people };
+              if (meId === null) delete next.meId;
+              else if (meId) next.meId = meId;
+              return next;
+            })
+          }
+          onDrawSpace={(pid) => {
+            setZonePerson(pid);
+            setSelection(null);
+            setDraft(null);
+            setMode('zone');
+            setSheet(null);
+          }}
+          onShare={() => setSheet('share')}
+          onClose={() => setSheet(null)}
+        />
+      )}
+      {sheet === 'mythings' && (
+        <MyThingsDialog
+          templates={templates}
+          homes={allHomes}
+          homeId={homeId}
+          floors={layout.floors}
+          floorIndex={floorIndex}
+          unit={unit}
+          onCount={(id, count) => S.updateTemplate(id, { count })}
+          onDelete={S.deleteTemplate}
+          onOpenHome={(id) => {
+            setSheet(null);
+            const h = allHomes.find((x) => x.id === id);
+            if (h && id !== homeId) navigate(`/edit/${id}/${h.layouts[0].id}`);
+          }}
+          onPlace={(placed, missing, already) => {
+            const byId = new Map(templates.map((t) => [t.id, t]));
+            const items: Item[] = placed.flatMap((p) => {
+              const t = byId.get(p.thing.key.split('#')[0]);
+              if (!t) return [];
+              return [
+                {
+                  id: newId(),
+                  type: t.type || 'custom',
+                  label: t.label,
+                  x: p.x,
+                  y: p.y,
+                  width: t.width,
+                  depth: t.depth,
+                  rotation: p.rotation,
+                  shape: t.shape,
+                  color: t.color,
+                  ...(t.heightMm ? { heightMm: t.heightMm } : {}),
+                  ...(home.meId ? { owner: home.meId } : {}),
+                },
+              ];
+            });
+            if (items.length) edit((f) => items.reduce((acc, it) => ops.addItem(acc, it), f));
+            setSheet(null);
+            const names = [...new Set(missing.map((m) => m.label))];
+            toast(
+              (items.length ? `Placed ${items.length} thing${items.length === 1 ? '' : 's'}.` : 'Nothing new to place.') +
+                (already ? ` ${already} already here.` : '') +
+                (names.length ? ` No room for: ${names.join(', ')}.` : ''),
+            );
+          }}
+          onClose={() => setSheet(null)}
+        />
+      )}
       {sheet === 'estimate' && (
         <EstimateDialog layout={layout} unit={unit} multi={multi} onChange={(estimate) => S.editLayout(homeId, layoutId, (l) => ({ ...l, estimate }))} onClose={() => setSheet(null)} />
       )}
@@ -1211,7 +1526,13 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
               <Share2 size={18} /> Share link
             </button>
             <button className="action-item" onClick={() => setSheet('estimate')}>
-              <Calculator size={18} /> Bricks & tiles cost
+              <Calculator size={18} /> Building cost
+            </button>
+            <button className="action-item" onClick={() => setSheet('mythings')}>
+              <PackageOpen size={18} /> My things (for any home)
+            </button>
+            <button className="action-item" onClick={() => setSheet('roommates')}>
+              <Users size={18} /> Roommates
             </button>
             <button className="action-item" onClick={() => setSheet('export')}>
               <ImageIcon size={18} /> Save as image (PNG)
