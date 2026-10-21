@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ArrowDown, ArrowLeft, ArrowUp, Box as BoxIcon, Eye, Plus, RotateCcw, RotateCw, Scissors, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Box as BoxIcon, Eye, Plus, RotateCcw, RotateCw, Ruler, Scissors, Trash2 } from 'lucide-react';
 import { Dialog } from '../components/Dialog';
 import { FurniturePanel, type Pickable } from '../editor/panels/FurniturePanel';
 import { formatLength } from '../model/units';
@@ -39,7 +39,9 @@ interface Props {
   /** Editing in 3D (left out = look only). */
   templates?: ItemTemplate[];
   onAddItem?: (floorIndex: number, item: Item) => void;
-  onUpdateItem?: (floorIndex: number, id: string, patch: Partial<Item>) => void;
+  /** live = a frame of a drag (no undo step); onDragStart makes one undo step first. */
+  onUpdateItem?: (floorIndex: number, id: string, patch: Partial<Item>, live?: boolean) => void;
+  onDragStart?: () => void;
   onDeleteItem?: (floorIndex: number, id: string) => void;
 }
 
@@ -208,8 +210,59 @@ function ItemMesh({ it, floor, state, rise }: { it: Item; floor: Floor; state: '
   );
 }
 
+interface DragStart {
+  /** Height (m) of the flat plane the finger slides on: where the thing was grabbed. */
+  planeY: number;
+  /** From the grab point to the thing's centre (m). */
+  offset: { x: number; z: number };
+  startX: number;
+  startY: number;
+  onFirstMove: () => void;
+  onMove: (x: number, z: number) => void;
+}
+type DragApi = { start: (d: DragStart) => void };
+
+/** Moves a thing with the finger: the finger's ray hits a flat plane at the grab height. The view doesn't turn meanwhile. */
+function DragHelper({ api, controls }: { api: MutableRefObject<DragApi | null>; controls: MutableRefObject<OrbitControls | null> }) {
+  const { camera, gl } = useThree();
+  useEffect(() => {
+    api.current = {
+      start: (d) => {
+        if (controls.current) controls.current.enabled = false;
+        const ray = new THREE.Raycaster();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -d.planeY);
+        const hit = new THREE.Vector3();
+        let moved = false;
+        const move = (ev: PointerEvent) => {
+          if (!moved) {
+            if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < 6) return;
+            moved = true;
+            d.onFirstMove();
+          }
+          const r = gl.domElement.getBoundingClientRect();
+          ray.setFromCamera(new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1), camera);
+          if (ray.ray.intersectPlane(plane, hit)) d.onMove(hit.x + d.offset.x, hit.z + d.offset.z);
+        };
+        const up = () => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up, true);
+          window.removeEventListener('pointercancel', up, true);
+          if (controls.current) controls.current.enabled = true;
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up, true);
+        window.addEventListener('pointercancel', up, true);
+      },
+    };
+    return () => {
+      api.current = null;
+    };
+  }, [api, controls, camera, gl]);
+  return null;
+}
+
 /** Orbit controls: one finger rotates, pinch zooms, two fingers pan. Renders only on change. */
-function Controls({ target, preset }: { target: THREE.Vector3; preset: { pos: THREE.Vector3; n: number } }) {
+function Controls({ target, preset, controlsRef }: { target: THREE.Vector3; preset: { pos: THREE.Vector3; n: number }; controlsRef?: MutableRefObject<OrbitControls | null> }) {
   const { camera, gl, invalidate } = useThree();
   const ref = useRef<OrbitControls | null>(null);
   useEffect(() => {
@@ -222,6 +275,7 @@ function Controls({ target, preset }: { target: THREE.Vector3; preset: { pos: TH
     c.addEventListener('change', () => invalidate());
     c.update();
     ref.current = c;
+    if (controlsRef) controlsRef.current = c;
     return () => c.dispose();
   }, [camera, gl, invalidate]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -258,11 +312,22 @@ function holesIn(holes: Pt[][], b: { minX: number; minY: number; maxX: number; m
 
 /** One storey: floor surfaces (with stair holes), slab, walls and furniture. */
 type Tap = ThreeEvent<MouseEvent>;
+
+/** An orange line drawn on top of everything, between two measured points. */
+function measureLine(a: THREE.Vector3, b: THREE.Vector3): THREE.Line {
+  const g = new THREE.BufferGeometry().setFromPoints([a, b]);
+  const m = new THREE.LineBasicMaterial({ color: '#e8590c', depthTest: false });
+  const l = new THREE.Line(g, m);
+  l.renderOrder = 10;
+  return l;
+}
 /** A real tap, not the end of turning the view. */
 const isTap = (e: Tap) => e.delta < 8;
 
-function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, selectedId, onFloorTap, onItemTap, onWallTap }: {
+function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, selectedId, onFloorTap, onItemTap, onWallTap, measuring, onItemDown }: {
+  onItemDown?: (id: string, e: ThreeEvent<PointerEvent>) => void;
   onWallTap?: () => void;
+  measuring?: boolean;
   selectedId?: string;
   onFloorTap?: (p: Pt) => void;
   onItemTap?: (id: string) => void;
@@ -300,10 +365,12 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, sele
   const walls = useMemo(() => walls3d(floor, cut), [floor, cut]);
   useEffect(() => () => [...surfaces.map((s) => s.geo), ...slabs.map((s) => s.geo), ...holeGeos].forEach((g) => g.dispose()), [surfaces, slabs, holeGeos]);
   const wallTap = (e: Tap) => {
+    if (measuring) return; // let the measure tool have it
     e.stopPropagation();
     if (onWallTap && isTap(e)) onWallTap();
   };
   const floorTap = (e: Tap) => {
+    if (measuring) return;
     e.stopPropagation();
     if (onFloorTap && isTap(e)) onFloorTap({ x: e.point.x / M, y: e.point.z / M });
   };
@@ -354,7 +421,7 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, sele
         const h = pp.heightMm ?? info.heightMm;
         const horiz = g.along.x !== 0;
         return (
-          <mesh key={pp.id} position={[(g.pos.x + g.inward.x * 8) * M, h * M, (g.pos.y + g.inward.y * 8) * M]}>
+          <mesh key={pp.id} position={[(g.pos.x + g.inward.x * 8) * M, h * M, (g.pos.y + g.inward.y * 8) * M]} userData={{ snap: true }}>
             <boxGeometry args={[(horiz ? w : 16) * M, 120 * M, (horiz ? 16 : w) * M]} />
             <meshStandardMaterial color={pp.kind === 'power' ? '#ffd8a8' : '#ffffff'} />
           </mesh>
@@ -379,8 +446,14 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, sele
           <group
             key={it.id}
             onClick={(e: Tap) => {
+              if (measuring) return;
               e.stopPropagation();
               if (onItemTap && isTap(e)) onItemTap(it.id);
+            }}
+            onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+              if (measuring || !onItemDown) return;
+              e.stopPropagation();
+              onItemDown(it.id, e);
             }}
           >
             <ItemMesh
@@ -396,11 +469,47 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, sele
   );
 }
 
-export default function View3D({ floors, startIndex, multi, homeName, layoutName, unit, settings, onClose, templates = [], onAddItem, onUpdateItem, onDeleteItem }: Props) {
+export default function View3D({ floors, startIndex, multi, homeName, layoutName, unit, settings, onClose, templates = [], onAddItem, onUpdateItem, onDeleteItem, onDragStart }: Props) {
   const editable = !!(onAddItem && onUpdateItem && onDeleteItem);
   const [sel, setSel] = useState<{ fi: number; id: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [tip, setTip] = useState<string | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const dragApi = useRef<DragApi | null>(null);
+  const itemDown = (fi: number, id: string, e: ThreeEvent<PointerEvent>) => {
+    const it = floors[fi]?.items.find((x) => x.id === id);
+    if (!it || !onUpdateItem || it.locked) return;
+    setSel({ fi, id });
+    dragApi.current?.start({
+      planeY: e.point.y,
+      offset: { x: it.x * M - e.point.x, z: it.y * M - e.point.z },
+      startX: e.nativeEvent.clientX,
+      startY: e.nativeEvent.clientY,
+      onFirstMove: () => onDragStart?.(),
+      onMove: (x, z) => onUpdateItem(fi, id, { x: Math.round(x / M), y: Math.round(z / M) }, true),
+    });
+  };
+  const [marks, setMarks] = useState<{ a: THREE.Vector3; b?: THREE.Vector3; line?: THREE.Line }[]>([]);
+  const measureTap = (e: Tap) => {
+    if (!measuring || !isTap(e)) return;
+    e.stopPropagation(); // only the nearest thing under the finger
+    const p = e.object.userData?.snap ? e.object.getWorldPosition(new THREE.Vector3()) : e.point.clone();
+    setMarks((m) => {
+      const last = m[m.length - 1];
+      if (last && !last.b) return [...m.slice(0, -1), { a: last.a, b: p, line: measureLine(last.a, p) }];
+      return [...m, { a: p }];
+    });
+  };
+  const lastMark = marks[marks.length - 1];
+  const measureText = (() => {
+    if (!lastMark) return 'Tap two points: a plug, the AC, a wall, the floor…';
+    if (!lastMark.b) return 'Now tap the second point';
+    const d = lastMark.a.distanceTo(lastMark.b) / M;
+    const across = Math.hypot(lastMark.a.x - lastMark.b.x, lastMark.a.z - lastMark.b.z) / M;
+    const up = Math.abs(lastMark.a.y - lastMark.b.y) / M;
+    return `${formatLength(d, unit)}` + (up > 30 && across > 30 ? ` · ${formatLength(across, unit)} across, ${formatLength(up, unit)} up` : '');
+  })();
   const selItem = sel ? floors[sel.fi]?.items.find((i) => i.id === sel.id) : undefined;
   useEffect(() => {
     if (sel && !selItem) setSel(null);
@@ -594,8 +703,10 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
             <hemisphereLight args={['#ffffff', dark ? '#30343b' : '#c9ced6', 1.1]} />
             <directionalLight position={[target.x + 5, target.y + 8, target.z + 3]} intensity={1.4} />
             <directionalLight position={[target.x - 4, target.y + 5, target.z - 6]} intensity={0.5} />
-            <Controls target={target} preset={preset} />
+            <Controls target={target} preset={preset} controlsRef={controlsRef} />
+            <DragHelper api={dragApi} controls={controlsRef} />
 
+            <group onClick={measureTap}>
             {/* ground (see-through when basements are shown) */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[target.x, -0.003, target.z]}>
               <planeGeometry args={[span * 3 + 4, span * 3 + 4]} />
@@ -604,9 +715,11 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
             {shown.map((i) => (
               <group key={floors[i].id} position={[0, yOf(i) * M, 0]}>
                 <Storey
+                  measuring={measuring}
                   selectedId={sel?.fi === i ? sel.id : undefined}
                   onFloorTap={editable ? (p) => moveTo(i, p) : undefined}
-                  onItemTap={editable ? (id) => setSel(sel?.id === id ? null : { fi: i, id }) : undefined}
+                  onItemTap={editable ? (id) => setSel({ fi: i, id }) : undefined}
+                  onItemDown={editable ? (id, e) => itemDown(i, id, e) : undefined}
                   onWallTap={sel ? () => setTip('That is a wall. Tap the floor (Top view or Cut walls makes it easy).') : undefined}
                   floor={floors[i]}
                   below={floors[i - 1]}
@@ -619,14 +732,49 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
                 />
               </group>
             ))}
+            </group>
+            {marks.map((m, k) => (
+              <group key={k}>
+                {[m.a, m.b].filter(Boolean).map((p, j) => (
+                  <mesh key={j} position={p as THREE.Vector3}>
+                    <sphereGeometry args={[0.035, 12, 8]} />
+                    <meshBasicMaterial color="#e8590c" depthTest={false} />
+                  </mesh>
+                ))}
+                {m.line && <primitive object={m.line} />}
+              </group>
+            ))}
           </Canvas>
         )}
 
-        {selItem && sel && editable ? (
+        {measuring ? (
+          <div className="view3d-edit" role="status" aria-label="Measure">
+            <div className="view3d-edit-title">
+              <strong data-testid="measure-3d">{measureText}</strong>
+              <span>Straight line in 3D, counting the height (like a cable from a plug to the AC).</span>
+            </div>
+            <div className="view3d-edit-btns">
+              {marks.length > 0 && (
+                <button className="btn" onClick={() => setMarks([])}>
+                  Clear
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setMeasuring(false);
+                  setMarks([]);
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : selItem && sel && editable ? (
           <div className="view3d-edit" role="toolbar" aria-label={`${selItem.label} in 3D`}>
             <div className="view3d-edit-title">
               <strong>{selItem.label}</strong>
-              <span>Tap the floor to move it here · {formatLength(itemElevation(selItem), unit)} from the floor</span>
+              <span>Drag it, or tap the floor to move it there · {formatLength(itemElevation(selItem), unit)} from the floor</span>
             </div>
             <div className="view3d-edit-btns">
               <button className="icon-btn" aria-label="Turn left" onClick={() => onUpdateItem!(sel.fi, sel.id, { rotation: (selItem.rotation + 270) % 360 })}>
@@ -672,6 +820,16 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
           <button
             className="btn"
             onClick={() => {
+              setSel(null);
+              setGap(0); // real heights while measuring
+              setMeasuring(true);
+            }}
+          >
+            <Ruler size={17} /> Measure
+          </button>
+          <button
+            className="btn"
+            onClick={() => {
               const i = all ? Math.min(Math.max(startIndex, 0), floors.length - 1) : (show as number);
               setPreset({ pos: new THREE.Vector3(target.x, yOf(i) * M + 1.6, target.z + 0.01 + span * 0.15), n: preset.n + 1 });
             }}
@@ -702,7 +860,7 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
           )}
         </div>
       </div>
-      <p className="view3d-help">{editable ? 'Tap a thing to pick it · ' : ''}One finger to turn · pinch to zoom · two fingers to move</p>
+      <p className="view3d-help">{editable ? 'Tap or drag a thing to move it · ' : ''}One finger to turn · pinch to zoom · two fingers to move</p>
       {adding && (
         <Dialog title={`Add to ${multi ? floors[addTo].name : 'the room'}`} subtitle="Tap an item. Then tap the floor in 3D to put it there." onClose={() => setAdding(false)}>
           <FurniturePanel multi={multi} unit={unit} templates={templates} onPick={addPick} onCustom={() => setTip('Make custom items in the 2D plan.')} onDeleteTemplate={() => {}} />

@@ -37,7 +37,7 @@ import { fitView, floorBounds, screenToWorld, zoomAt } from '../geometry/view';
 import { itemBox, itemPoly, normAngle, rotationHandle } from '../geometry/items';
 import { distPointSeg, pointInPoly, polyBox, type Poly, type Pt } from '../geometry/poly';
 import { hitWall, innerWallOf, openingGeom, sideLine } from '../geometry/walls';
-import { computeWarnings, coverHeadroom, roomOfPoint, stairOpenings, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warning } from '../geometry/warnings';
+import { computeWarnings, coverHeadroom, nearestPlug, roomOfPoint, stairOpenings, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warning } from '../geometry/warnings';
 import { rotationFacingWall, snapItemBox, snapRoom, type Guide } from '../geometry/snapping';
 import { snapMeasurePoint } from '../geometry/measure';
 import * as ops from '../model/ops';
@@ -900,6 +900,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
           onStack={() => selSupport && stackSelected(selSupport)}
           onFloor={() => edit((f) => ops.putOnFloor(f, selItem.id))}
           people={people}
+          plug={(floor.points ?? []).length ? nearestPlug(floor, selItem, false) : undefined}
           onRoute={itemMount(selItem) === 'floor' && !isStairs(selItem) ? () => runRoute(selItem) : undefined}
           onSaveTemplate={
             !isStairs(selItem) && !templates.some((t) => t.label === selItem.label && t.width === selItem.width && t.depth === selItem.depth)
@@ -1747,7 +1748,10 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             settings={settings}
             templates={templates}
             onAddItem={(fi, item) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.addItem(f, home.meId ? { ...item, owner: home.meId } : item) : f)) }))}
-            onUpdateItem={(fi, id, patch) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.updateItem(f, id, patch) : f)) }))}
+            onUpdateItem={(fi, id, patch, live) =>
+              S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.updateItem(f, id, patch) : f)) }), live ? { history: false } : undefined)
+            }
+            onDragStart={() => S.checkpoint(homeId, layoutId)}
             onDeleteItem={(fi, id) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.deleteItem(f, id) : f)) }))}
             onClose={() => navigate(`/edit/${homeId}/${layoutId}`, true)}
           />

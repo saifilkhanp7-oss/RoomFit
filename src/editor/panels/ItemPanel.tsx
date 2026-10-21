@@ -1,3 +1,4 @@
+import type { PlugDistance } from '../../geometry/warnings';
 import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus, Route } from 'lucide-react';
 import type { Item, Unit, Person } from '../../model/types';
@@ -20,13 +21,15 @@ interface Props {
   onSaveTemplate?: () => void;
   onRoute?: () => void;
   people?: Person[];
+  /** Nearest plug in 3D (when plug points are marked). */
+  plug?: PlugDistance | null;
   /** Item it could be put on top of (under its middle). */
   support?: Item;
   onStack: () => void;
   onFloor: () => void;
 }
 
-export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate, support, onStack, onFloor, onRoute, people = [] }: Props) {
+export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplicate, onDelete, onSaveTemplate, support, onStack, onFloor, onRoute, people = [], plug }: Props) {
   const height = itemHeight(item) ?? DEFAULT_ITEM_HEIGHT;
   const openBelow = itemOpenBelow(item);
   const [label, setLabel] = useState(item.label);
@@ -218,6 +221,14 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
             })}
           </div>
         </div>
+      )}
+
+      {plug !== undefined && itemPower(item) !== 'none' && (
+        <p className="hint plug-dist" role="status">
+          {plug
+            ? `Nearest plug: ${formatLength(plug.distance, unit)}` + (plug.up > 50 ? ` (${formatLength(plug.across, unit)} across, ${formatLength(plug.up, unit)} ${plug.above ? 'up' : 'down'})` : '')
+            : 'No plug point on this floor yet.'}
+        </p>
       )}
 
       {people.length > 0 && !isStairs(item) && (

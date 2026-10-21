@@ -90,6 +90,10 @@ export function Help() {
               Fridges, washing machines and geysers should have a plug close by (no extension cord).
             </li>
             <li>Any item can be set to need a plug in its settings (e.g. a bed where you charge your phone).</li>
+            <li>
+              Distances count the height too, like a real cable: an AC at 7′ and a plug at 1′ that are 4′ apart on the plan are √(4² + 6²) ≈ 7′ 2″ apart. Select the item to see "Nearest plug: 7′ 2″ (4′
+              across, 6′ up)". For an AC, put its 16A point high, next to it.
+            </li>
           </ul>
         </section>
         <section>
@@ -214,8 +218,13 @@ export function Help() {
           <h2>3D view</h2>
           <ul>
             <li>
-              <strong>Add things in 3D:</strong> tap <strong>Add</strong>, pick an item, then tap the floor where it goes (the Top view or Cut walls makes this easy). Tap any thing to pick it: turn it,
-              raise or lower it (e.g. a suitcase on a cupboard), or delete it. It's the same plan as in 2D.
+              <strong>Measure in 3D:</strong> tap <strong>Measure</strong>, then tap two points (a plug, the AC, a wall, the floor…). You get the straight distance in 3D, with how much is across and how
+              much is up.
+            </li>
+            <li>
+              <strong>Add and move things in 3D:</strong> tap <strong>Add</strong> and pick an item. <strong>Drag any thing with one finger</strong> to move it across the floor (the view doesn't turn
+              while you drag), or pick it and tap the floor where it goes. The bar at the bottom turns it, raises or lowers it (e.g. a suitcase on a cupboard), or deletes it. Dragging empty space still turns
+              the view. It's the same plan as in 2D, and Undo works.
             </li>
             <li>Set the ceiling height in the room settings and the height of furniture to check tall things. Typical heights are used if you don't.</li>
             <li>

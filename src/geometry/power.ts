@@ -6,7 +6,7 @@ import { fi } from '../model/catalog';
 export const POWER_KINDS: { kind: PowerKind; label: string; short: string; heightMm: number; givesPower: boolean; note: string }[] = [
   { kind: 'board', label: 'Switchboard', short: 'Board', heightMm: fi(4), givesPower: true, note: 'Switches with a plug point' },
   { kind: 'socket', label: 'Plug point', short: 'Plug', heightMm: fi(1), givesPower: true, note: 'Just a socket, low on the wall' },
-  { kind: 'power', label: 'Power point (16A)', short: '16A', heightMm: fi(1), givesPower: true, note: 'For AC, fridge, geyser, washing machine' },
+  { kind: 'power', label: 'Power point (16A)', short: '16A', heightMm: fi(1), givesPower: true, note: 'For AC (put it high, next to the AC), fridge, geyser, washing machine' },
   { kind: 'switch', label: 'Switches only', short: 'Switch', heightMm: fi(4), givesPower: false, note: 'Light and fan switches, no plug' },
 ];
 export const kindInfo = (k: PowerKind) => POWER_KINDS.find((x) => x.kind === k)!;

@@ -418,39 +418,33 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
   }
 
   // 10. Plug points: things that need electricity, too far from a plug. Only once some are marked.
-  const pts = (floor.points ?? []).flatMap((p) => {
-    const g = pointPos(floor, p);
-    return g && kindInfo(p.kind).givesPower ? [{ p, pos: g.pos }] : [];
-  });
-  if (pts.length) {
+  // Distances are in 3D: across the room and up/down the wall (Pythagoras), like a real cable.
+  if ((floor.points ?? []).some((p) => kindInfo(p.kind).givesPower)) {
     for (const it of items) {
       const need = itemPower(it);
       if (need === 'none') continue;
-      const poly = polys.get(it.id)!;
-      let near = Infinity;
-      let nearAny = Infinity;
-      for (const { p, pos } of pts) {
-        const d = pointInPoly(pos, poly) ? 0 : Math.min(...poly.map((q, i) => distPointSeg(pos, q, poly[(i + 1) % poly.length])));
-        nearAny = Math.min(nearAny, d);
-        if (p.kind === 'power' || need === 'light') near = Math.min(near, d);
-      }
+      const any = nearestPlug(floor, it, false);
+      const best = need === 'light' ? any : nearestPlug(floor, it, true);
+      if (!any) continue;
       const name = it.label;
+      const how = (n: PlugDistance) => (n.up > 50 ? ` (${fmt(n.across)} across, ${fmt(n.up)} ${n.above ? 'up' : 'down'})` : '');
       if (need === 'ac') {
-        if (nearAny > fi(5)) add({ id: `power:${it.id}`, level: 'yellow', message: `${name} has no power point on its wall (nearest plug ${fmt(nearAny)} away). Add a 16A power point next to it.`, itemIds: [it.id] });
+        if (any.distance > fi(5))
+          add({ id: `power:${it.id}`, level: 'yellow', message: `${name} has no power point on its wall: nearest plug ${fmt(any.distance)} away${how(any)}. Add a 16A power point next to it.`, itemIds: [it.id] });
       } else if (need === 'heavy') {
-        if (nearAny > REACH_HEAVY)
+        if (any.distance > REACH_HEAVY)
           add({
             id: `power:${it.id}`,
             level: 'yellow',
-            message: `${name} is ${fmt(nearAny)} from the nearest plug. Big appliances shouldn't use an extension cord: add a power point near it.`,
+            message: `${name} is ${fmt(any.distance)} from the nearest plug${how(any)}. Big appliances shouldn't use an extension cord: add a power point near it.`,
             itemIds: [it.id],
           });
-      } else if (near > REACH_LIGHT) {
-        const cord = cordFor(near, opts.unit);
+      } else if (best && best.distance > REACH_LIGHT) {
+        const cord = cordFor(best.distance, opts.unit);
         add({
           id: `power:${it.id}`,
           level: 'yellow',
-          message: `${name} is ${fmt(near)} from the nearest plug point.` + (cord ? ` Use a ${cordText(cord, opts.unit)} extension cord, or add a plug point.` : ' Add a plug point near it.'),
+          message: `${name} is ${fmt(best.distance)} from the nearest plug point${how(best)}.` + (cord ? ` Use a ${cordText(cord, opts.unit)} extension cord, or add a plug point.` : ' Add a plug point near it.'),
           itemIds: [it.id],
         });
       }
@@ -489,4 +483,36 @@ export function coverHeadroom(below: Floor | undefined, c: { x: number; y: numbe
   let room = Infinity;
   for (const st of below.items.filter(isStairs)) for (const b of stairBlocksWorld(st, rise)) if (polysIntersect(b.poly, cp, 1)) room = Math.min(room, rise - SLAB - b.top);
   return room;
+}
+
+export interface PlugDistance {
+  /** Straight-line distance in 3D (√(across² + up²)). */
+  distance: number;
+  across: number;
+  up: number;
+  /** The thing is higher than the plug (the cable goes up to it). */
+  above: boolean;
+  pointId: string;
+}
+
+/**
+ * Nearest plug to a thing, in 3D: the distance across the room to the nearest edge of the thing,
+ * and the height between the plug and the thing (0 if the plug is level with it).
+ */
+export function nearestPlug(floor: Floor, it: Item, onlyPowerPoints: boolean): PlugDistance | null {
+  const poly = itemPoly(it);
+  const span = itemSpan(it);
+  let best: PlugDistance | null = null;
+  for (const p of floor.points ?? []) {
+    const info = kindInfo(p.kind);
+    if (!info.givesPower || (onlyPowerPoints && p.kind !== 'power')) continue;
+    const g = pointPos(floor, p);
+    if (!g) continue;
+    const across = pointInPoly(g.pos, poly) ? 0 : Math.min(...poly.map((q, i) => distPointSeg(g.pos, q, poly[(i + 1) % poly.length])));
+    const h = p.heightMm ?? info.heightMm;
+    const up = h < span.bottom ? span.bottom - h : h > span.top ? h - span.top : 0;
+    const distance = Math.hypot(across, up);
+    if (!best || distance < best.distance) best = { distance, across, up, above: h < span.bottom, pointId: p.id };
+  }
+  return best;
 }

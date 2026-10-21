@@ -204,3 +204,15 @@
   text-align: center;
   pointer-events: none;
 }
+@media (max-width: 460px) {
+  .view3d-presets {
+    gap: 4px;
+  }
+  .view3d-presets .btn {
+    padding: 0 9px;
+    font-size: 13.5px;
+  }
+  .view3d-presets .btn:not(.btn-primary) svg {
+    display: none;
+  }
+}

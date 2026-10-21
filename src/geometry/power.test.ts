@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeFloor, makeRoom } from '../model/defaults';
 import { fi } from '../model/catalog';
-import { computeWarnings, coverHeadroom, HEADROOM } from './warnings';
+import { computeWarnings, coverHeadroom, HEADROOM, nearestPlug } from './warnings';
 import { cordFor } from './power';
 import type { Floor, Item, PowerPoint } from '../model/types';
 
@@ -20,7 +20,7 @@ describe('plug points', () => {
   it('study table far from the only plug: warning with an extension cord length', () => {
     const w = warn({ ...base(), points: [plug()], items: [table()] }).list.find((x) => x.id === 'power:desk')!;
     expect(w.level).toBe('yellow');
-    expect(w.message).toMatch(/Study table is .* from the nearest plug point\. Use a \d+ ft extension cord/);
+    expect(w.message).toMatch(/Study table is .* from the nearest plug point \(.* across, .* down\)\. Use a \d+ ft extension cord/);
   });
   it('a plug next to it: fine', () => {
     const f = { ...base(), points: [plug({ side: 'right', offsetMm: fi(8) })], items: [table()] };
@@ -37,8 +37,20 @@ describe('plug points', () => {
     const l = warn(f).list;
     expect(l.find((x) => x.id === 'power:ac')?.message).toContain('no power point on its wall');
     expect(l.find((x) => x.id === 'power:fr')?.message).toContain("shouldn't use an extension cord");
-    const ok = { ...f, points: [plug({ side: 'top', offsetMm: fi(6) + 500, kind: 'power' })] };
+    // a 16A point low on the wall is 6 ft below the AC: still too far in 3D
+    const low = { ...f, points: [plug({ side: 'top', offsetMm: fi(6) + 500, kind: 'power' })] };
+    expect(warn(low).list.find((x) => x.id === 'power:ac')?.message).toMatch(/across, 6′ up/);
+    const ok = { ...f, points: [plug({ side: 'top', offsetMm: fi(6) + 500, kind: 'power', heightMm: fi(7) })] };
     expect(warn(ok).list.some((x) => x.id === 'power:ac')).toBe(false);
+  });
+  it('distance counts the height (Pythagoras)', () => {
+    const ac = item({ id: 'ac', type: 'ac', label: 'AC', x: fi(6), y: 120, width: fi(3), depth: fi(0, 9), heightMm: fi(1), elevationMm: fi(7) });
+    // plug 4 ft along the wall from the AC's edge, 6 ft lower than the AC's bottom → 7.2 ft
+    const f = { ...base(), points: [plug({ side: 'top', offsetMm: fi(6) - fi(1, 6) - fi(4), kind: 'board', heightMm: fi(1) })], items: [ac] };
+    const n = nearestPlug(f, ac, false)!;
+    expect(n.across).toBeCloseTo(fi(4), -1);
+    expect(n.up).toBeCloseTo(fi(6), -1);
+    expect(n.distance).toBeCloseTo(Math.hypot(fi(4), fi(6)), -1);
   });
   it('cord sizes', () => {
     expect(cordFor(fi(7), 'ft')).toBe(fi(10));

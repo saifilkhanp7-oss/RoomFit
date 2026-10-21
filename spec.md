@@ -644,3 +644,12 @@ Emulated WebKit is close to Safari but not identical — especially for touch ge
 **3D editing:** the 3D view gets an **Add** button (furniture list) that adds to the floor open in 2D (or the floor picked in 3D), at the middle of the room the camera looks at (wall-fixed things against the top wall). Tap a thing to pick it (blue glow); tap the floor to move it there (a tap = pointer moved under 8 px, so turning the view never moves things); tapping a wall shows a tip. The edit bar: turn left/right 90°, raise/lower 6″ (stacking), delete, Done. Changes go to the same plan (undo works, warnings update).
 
 **Wall colours:** `Room.wallColor` for all its walls, `Room.sideColors[side]` for one wall (top/right/bottom/left as on the plan), `Partition.color`. 16 paint swatches + any colour. 3D: a 3 mm paint layer on the inside face of each wall piece (doors/windows stay open). 2D: a coloured line along the inside of painted walls.
+
+## 21. Distances in 3D (added later)
+
+- Plug distances use 3D: across = plan distance from the plug to the nearest edge of the thing; up = height between the plug (its height from the floor) and the thing's height range (0 if level); distance = √(across² + up²). Warnings and cord lengths use it and show "(… across, … up/down)". The item settings show "Nearest plug: …" when plugs are marked. 16A points: "put it high, next to the AC".
+- 3D Measure: tap two points on anything (floor, walls, things, plug plates snap to their centre); orange dots and a line drawn on top; shows the 3D distance with across and up. "Space between floors" is set to 0 while measuring so heights are real.
+
+## 22. Dragging in 3D (added later)
+
+Pressing on a thing in 3D picks it and starts a drag: the camera controls are switched off until the finger lifts, and the finger's ray meets a flat plane at the height where the thing was grabbed, so it slides along the floor under the finger. The first move (over 6 px) makes one undo step; the frames of the drag don't. Pressing empty space still turns the view.
