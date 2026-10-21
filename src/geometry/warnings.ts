@@ -1,13 +1,17 @@
+import { cordFor, cordText, kindInfo, pointPos, REACH_HEAVY, REACH_LIGHT } from './power';
+import { floorHeight, SLAB } from './levels';
 import { partitionPoly, partitionSpan } from './partitions';
 import { stairBlocksWorld } from './stairs';
 import type { Floor, Item, Room, Settings, Unit, Person } from '../model/types';
-import { catalogEntry, isStairs, isWallFixed, itemDrop, itemElevation, itemHeight, itemMount, itemSpan } from '../model/catalog';
+import { catalogEntry, fi, isStairs, isWallFixed, itemDrop, itemElevation, itemHeight, itemMount, itemPower, itemSpan } from '../model/catalog';
+
+export const HEADROOM = 1829; // 6 ft of head room over the stairs
 import { formatLength } from '../model/units';
 import { itemPoly } from './items';
 import { polyBox, polyGap, polysIntersect, boxesOverlap, type Poly, type Pt } from './poly';
 import { childBlocks, doorSwings, DOOR_HEIGHT, openingGeom, wallBands } from './walls';
 import { fitsInSpace, spaceOfPoint } from './spaces';
-import { pointInPoly, rotatePt } from './poly';
+import { distPointSeg, pointInPoly, rotatePt } from './poly';
 
 export const DEFAULT_CEILING = 3048; // 10 ft
 export const DEFAULT_SILL = 914; // 3 ft
@@ -207,10 +211,16 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
   // (stairs going on up, a landing, a closed-over part), so it's a yellow warning the user can let be.
   // Lamps and fans hang from the ceiling, so they're always fine over the stairs.
   const below = opts.floorBelow?.name ?? 'the floor below';
+  const covers = floor.covers ?? [];
+  const onCover = (it: Item) => {
+    const b = boxes.get(it.id)!;
+    return covers.some((c) => b.minX >= c.x - 10 && b.maxX <= c.x + c.width + 10 && b.minY >= c.y - 10 && b.maxY <= c.y + c.length + 10);
+  };
   for (const so of stairOpenings(opts.floorBelow)) {
     for (const it of items) {
       if (itemMount(it) === 'ceiling') continue;
       if (!polysIntersect(polys.get(it.id)!, so.poly)) continue;
+      if (onCover(it)) continue; // there is floor under it
       const message = isStairs(it)
         ? `${it.label} over the stair opening from ${below}: fine if the stairs go on up, check the head room`
         : `${it.label} is over the stair opening from ${below}: fine only if the floor is closed there`;
@@ -381,6 +391,72 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
         });
     }
 
+  // 9. Floor over the stairs: enough head room for the people going up below it?
+  if (opts.floorBelow && covers.length) {
+    const rise = floorHeight(opts.floorBelow);
+    for (const c of covers) {
+      const cp = [
+        { x: c.x, y: c.y },
+        { x: c.x + c.width, y: c.y },
+        { x: c.x + c.width, y: c.y + c.length },
+        { x: c.x, y: c.y + c.length },
+      ];
+      let room = Infinity;
+      for (const st of opts.floorBelow.items.filter(isStairs)) {
+        for (const b of stairBlocksWorld(st, rise)) if (polysIntersect(b.poly, cp, 1)) room = Math.min(room, rise - SLAB - b.top);
+      }
+      if (room < HEADROOM) {
+        list.push({
+          id: `headroom:${c.id}`,
+          level: room < fi(5) ? 'red' : 'yellow',
+          message: `Only ${fmt(Math.max(0, room))} head room on the stairs under this floor (people need about ${fmt(HEADROOM)}). Make the floor over the stairs smaller, or let it be.`,
+          itemIds: [],
+          focus: { x: c.x + c.width / 2, y: c.y + c.length / 2 },
+        });
+      }
+    }
+  }
+
+  // 10. Plug points: things that need electricity, too far from a plug. Only once some are marked.
+  const pts = (floor.points ?? []).flatMap((p) => {
+    const g = pointPos(floor, p);
+    return g && kindInfo(p.kind).givesPower ? [{ p, pos: g.pos }] : [];
+  });
+  if (pts.length) {
+    for (const it of items) {
+      const need = itemPower(it);
+      if (need === 'none') continue;
+      const poly = polys.get(it.id)!;
+      let near = Infinity;
+      let nearAny = Infinity;
+      for (const { p, pos } of pts) {
+        const d = pointInPoly(pos, poly) ? 0 : Math.min(...poly.map((q, i) => distPointSeg(pos, q, poly[(i + 1) % poly.length])));
+        nearAny = Math.min(nearAny, d);
+        if (p.kind === 'power' || need === 'light') near = Math.min(near, d);
+      }
+      const name = it.label;
+      if (need === 'ac') {
+        if (nearAny > fi(5)) add({ id: `power:${it.id}`, level: 'yellow', message: `${name} has no power point on its wall (nearest plug ${fmt(nearAny)} away). Add a 16A power point next to it.`, itemIds: [it.id] });
+      } else if (need === 'heavy') {
+        if (nearAny > REACH_HEAVY)
+          add({
+            id: `power:${it.id}`,
+            level: 'yellow',
+            message: `${name} is ${fmt(nearAny)} from the nearest plug. Big appliances shouldn't use an extension cord: add a power point near it.`,
+            itemIds: [it.id],
+          });
+      } else if (near > REACH_LIGHT) {
+        const cord = cordFor(near, opts.unit);
+        add({
+          id: `power:${it.id}`,
+          level: 'yellow',
+          message: `${name} is ${fmt(near)} from the nearest plug point.` + (cord ? ` Use a ${cordText(cord, opts.unit)} extension cord, or add a plug point.` : ' Add a plug point near it.'),
+          itemIds: [it.id],
+        });
+      }
+    }
+  }
+
   // "Let it be": warnings the user accepted are kept aside and don't colour the plan.
   const ok = new Set(floor.okWarnings ?? []);
   const active = list.filter((w) => !ok.has(w.id));
@@ -398,4 +474,19 @@ export function computeWarnings(floor: Floor, opts: WarningOptions): WarningResu
   // sort: red first
   active.sort((a, b) => (a.level === b.level ? 0 : a.level === 'red' ? -1 : 1));
   return { list: active, ignored, red, yellow, redOpenings, clearLines };
+}
+
+/** Smallest head room on the stairs under a piece of floor over the stair opening. Infinity if no stairs under it. */
+export function coverHeadroom(below: Floor | undefined, c: { x: number; y: number; width: number; length: number }): number {
+  if (!below) return Infinity;
+  const rise = floorHeight(below);
+  const cp = [
+    { x: c.x, y: c.y },
+    { x: c.x + c.width, y: c.y },
+    { x: c.x + c.width, y: c.y + c.length },
+    { x: c.x, y: c.y + c.length },
+  ];
+  let room = Infinity;
+  for (const st of below.items.filter(isStairs)) for (const b of stairBlocksWorld(st, rise)) if (polysIntersect(b.poly, cp, 1)) room = Math.min(room, rise - SLAB - b.top);
+  return room;
 }

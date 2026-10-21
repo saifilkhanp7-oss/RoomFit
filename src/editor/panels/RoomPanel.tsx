@@ -1,3 +1,4 @@
+import { WallColorPicker } from './WallColorPicker';
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { Floor, Room, Side, Unit } from '../../model/types';
@@ -86,6 +87,8 @@ export function RoomPanel({ room, floor, unit, heights, onChangeRoom, onChangeFl
           onChange={(ceilingMm) => onChangeRoom({ ceilingMm })}
         />
       )}
+
+      <WallColorPicker room={room} onChange={onChangeRoom} />
 
       {shared.length > 0 && (
         <div className="field">

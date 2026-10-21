@@ -1,10 +1,12 @@
+import { wallColorOf } from '../../geometry/wallPieces';
 import { PARTITION_DEFAULT, partitionAngle, partitionHeightText, partitionLength, partitionMid, partitionPoly, partitionSpan } from '../../geometry/partitions';
 // Draws the whole plan with the plain Canvas 2D API.
 // Used by the editor canvas, the shared-plan viewer and PNG export.
-import type { Floor, Item, LayoutView, Partition, Person, Unit } from '../../model/types';
+import type { Floor, Item, LayoutView, Partition, Person, PowerKind, Unit } from '../../model/types';
+import { pointPos } from '../../geometry/power';
 import { formatLength, gridSteps } from '../../model/units';
 import { isStairs, itemElevation, itemMount, itemOpenBelow } from '../../model/catalog';
-import { childBlocks, doorSwings, openingGeom, roomOuterBox, sharedWallBoxes } from '../../geometry/walls';
+import { childBlocks, doorSwings, openingGeom, roomOuterBox, sharedWallBoxes, sideLine, SIDES } from '../../geometry/walls';
 import { byDepth, childrenOf, freeRects, kindOf, rectArea } from '../../geometry/spaces';
 import type { Room, RoomKind } from '../../model/types';
 import { itemPoly, rotationHandle } from '../../geometry/items';
@@ -72,7 +74,7 @@ export const PALETTES: Record<'light' | 'dark', Palette> = {
   },
 };
 
-export type Selection = { kind: 'item' | 'room' | 'opening' | 'partition' | 'zone'; id: string } | null;
+export type Selection = { kind: 'item' | 'room' | 'opening' | 'partition' | 'zone' | 'point' | 'cover'; id: string } | null;
 
 /** Result of "Will it get in?": ghost outlines along the way. */
 export interface RouteDrawing {
@@ -103,6 +105,7 @@ export interface DrawState {
   guides?: Guide[];
   wallDraft?: { a: Pt; b?: Pt } | null;
   zoneDraft?: { a: Pt; b?: Pt; color: string } | null;
+  coverDraft?: { a: Pt; b?: Pt } | null;
   people?: Person[];
   route?: RouteDrawing | null;
   /** No selection handles or warning colours (PNG export) */
@@ -224,6 +227,23 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     for (const r of here) drawRoomFloor(c, r, K, z);
   }
 
+  // ---------- wall paint: a coloured line on the inside of painted walls ----------
+  for (const r of floor.rooms) {
+    if (!r.wallColor && !r.sideColors) continue;
+    const t = px(2.5);
+    for (const side of SIDES) {
+      const col = wallColorOf(r, side);
+      if (!col) continue;
+      const l = sideLine(r, side);
+      c.beginPath();
+      c.moveTo(l.a.x + l.inward.x * t, l.a.y + l.inward.y * t);
+      c.lineTo(l.b.x + l.inward.x * t, l.b.y + l.inward.y * t);
+      c.strokeStyle = col;
+      c.lineWidth = px(5);
+      c.stroke();
+    }
+  }
+
   // ---------- roommates' spaces ----------
   for (const zn of floor.zones ?? []) {
     const who = s.people?.find((p) => p.id === zn.personId);
@@ -274,6 +294,26 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     const cx = so.poly.reduce((a, p) => a + p.x, 0) / so.poly.length;
     const cy = so.poly.reduce((a, p) => a + p.y, 0) / so.poly.length;
     label(c, 'Stair opening', cx, cy, px(11), K.label, K.roomFill);
+  }
+
+  // ---------- floor built over part of the stair opening ----------
+  for (const cv of floor.covers ?? []) {
+    c.fillStyle = K.roomFill;
+    c.fillRect(cv.x, cv.y, cv.width, cv.length);
+    c.setLineDash([px(6), px(4)]);
+    c.strokeStyle = K.label;
+    c.lineWidth = px(1.5);
+    c.strokeRect(cv.x, cv.y, cv.width, cv.length);
+    c.setLineDash([]);
+    if (cv.width * z > 90 && cv.length * z > 26) label(c, 'Floor over stairs', cv.x + cv.width / 2, cv.y + cv.length / 2, px(10.5), K.label, K.roomFill, 600);
+  }
+  if (s.coverDraft?.b) {
+    const { a, b } = s.coverDraft;
+    c.fillStyle = withAlpha(K.select, 0.15);
+    c.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    c.strokeStyle = K.select;
+    c.lineWidth = px(2);
+    c.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
   }
 
   // ---------- doors & windows ----------
@@ -366,6 +406,14 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
       c.lineWidth = px(3);
       c.stroke();
     }
+  }
+
+  // ---------- plug points & switchboards on the walls ----------
+  for (const pp of floor.points ?? []) {
+    const g = pointPos(floor, pp);
+    if (!g) continue;
+    const sel = !s.clean && s.selection?.kind === 'point' && s.selection.id === pp.id;
+    drawPowerPoint(c, pp.kind, g.pos, g.inward, g.along, z, K, sel);
   }
 
   // ---------- inner walls standing on the floor ----------
@@ -512,6 +560,18 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
           c.stroke();
         }
       }
+    } else if (sel.kind === 'cover') {
+      const cv = floor.covers?.find((x) => x.id === sel.id);
+      if (cv) {
+        c.strokeStyle = K.select;
+        c.lineWidth = px(2.5);
+        c.strokeRect(cv.x, cv.y, cv.width, cv.length);
+        c.beginPath();
+        c.arc(cv.x + cv.width, cv.y + cv.length, px(8), 0, Math.PI * 2);
+        c.fillStyle = K.roomFill;
+        c.fill();
+        c.stroke();
+      }
     } else if (sel.kind === 'zone') {
       const zn = floor.zones?.find((x) => x.id === sel.id);
       if (zn) {
@@ -630,6 +690,44 @@ export function drawPlan(c: CanvasRenderingContext2D, s: DrawState) {
     c.fill();
   }
 
+  c.restore();
+}
+
+/** A small symbol on the inside of the wall: switchboard, plug, 16A point, switches. */
+function drawPowerPoint(c: CanvasRenderingContext2D, kind: PowerKind, at: Pt, inward: Pt, along: Pt, z: number, K: Palette, selected: boolean) {
+  const px = (n: number) => n / z;
+  const s = Math.max(px(9), 70); // half size, at least 9 px on screen
+  const cx = at.x + inward.x * s * 1.25;
+  const cy = at.y + inward.y * s * 1.25;
+  const col = kind === 'power' ? '#e8590c' : kind === 'switch' ? K.label : '#1c7ed6';
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(Math.atan2(along.y, along.x));
+  // plate
+  const w = kind === 'board' || kind === 'switch' ? s * 2.2 : s * 1.6;
+  roundRect(c, -w / 2, -s * 0.8, w, s * 1.6, s * 0.3);
+  c.fillStyle = K.roomFill;
+  c.fill();
+  c.lineWidth = px(selected ? 3 : 1.6);
+  c.strokeStyle = selected ? K.select : col;
+  c.stroke();
+  c.fillStyle = col;
+  if (kind === 'switch' || kind === 'board') {
+    // two little switches
+    for (const dx of kind === 'board' ? [-0.65, -0.2] : [-0.4, 0.4]) {
+      c.fillRect(dx * s - s * 0.13, -s * 0.4, s * 0.26, s * 0.8);
+    }
+  }
+  if (kind !== 'switch') {
+    // socket: two holes
+    const ox = kind === 'board' ? s * 0.55 : 0;
+    const r = kind === 'power' ? s * 0.17 : s * 0.12;
+    for (const dx of [-0.25, 0.25]) {
+      c.beginPath();
+      c.arc(ox + dx * s, 0, r, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
   c.restore();
 }
 

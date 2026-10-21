@@ -1,4 +1,4 @@
-import type { Floor } from '../model/types';
+import type { Floor, Room, Side } from '../model/types';
 import { DEFAULT_SILL, DEFAULT_WINDOW_H } from './warnings';
 import { DOOR_HEIGHT, neighbors, openingGeom, sideLine, SIDES, wallThickness } from './walls';
 import { flushWithParent, kindOf } from './spaces';
@@ -18,6 +18,15 @@ export interface WallPiece {
   z0: number;
   z1: number;
   glass?: boolean;
+  /** Which room and wall it belongs to, and a thin layer on its inside face for paint. */
+  roomId?: string;
+  side?: Side;
+  paint?: { x0: number; x1: number; y0: number; y1: number };
+}
+
+/** Paint colour of one wall of a room (its own colour, else the room's). */
+export function wallColorOf(r: Room, side: Side): string | undefined {
+  return r.sideColors?.[side] ?? r.wallColor;
 }
 
 /**
@@ -69,10 +78,14 @@ export function buildWalls(floor: Floor, cut = false): WallPiece[] {
         const start = horiz ? line.a.x : line.a.y;
         const lo = { a: start + from, b: start + to };
         const cross = { a: Math.min(c0, c1), b: Math.max(c0, c1) };
+        // paint: a 3 mm layer on the inside face, only along the room itself
+        const pa = { a: start + Math.max(0, from), b: start + Math.min(line.length, to) };
+        const pc = { a: Math.min(fixed, fixed + inward * 3), b: Math.max(fixed, fixed + inward * 3) };
+        const paint = !glass && pa.b - pa.a > 1 ? (horiz ? { x0: pa.a, x1: pa.b, y0: pc.a, y1: pc.b } : { x0: pc.a, x1: pc.b, y0: pa.a, y1: pa.b }) : undefined;
         out.push(
           horiz
-            ? { key, x0: lo.a, x1: lo.b, y0: cross.a, y1: cross.b, z0, z1, glass }
-            : { key, x0: cross.a, x1: cross.b, y0: lo.a, y1: lo.b, z0, z1, glass },
+            ? { key, x0: lo.a, x1: lo.b, y0: cross.a, y1: cross.b, z0, z1, glass, roomId: r.id, side, paint }
+            : { key, x0: cross.a, x1: cross.b, y0: lo.a, y1: lo.b, z0, z1, glass, roomId: r.id, side, paint },
         );
       };
 

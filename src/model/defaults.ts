@@ -104,6 +104,8 @@ export function cloneLayoutFresh(layout: Layout, name?: string): Layout {
       items: f.items.map((it) => ({ ...it, id: id() })),
       ...(f.partitions ? { partitions: f.partitions.map((p) => ({ ...p, id: id() })) } : {}),
       ...(f.zones ? { zones: f.zones.map((z) => ({ ...z, id: id() })) } : {}),
+      ...(f.points ? { points: f.points.map((p) => ({ ...p, id: id(), roomId: roomMap.get(p.roomId) ?? p.roomId })) } : {}),
+      ...(f.covers ? { covers: f.covers.map((c) => ({ ...c, id: id() })) } : {}),
     };
   });
   const estimate = layout.estimate

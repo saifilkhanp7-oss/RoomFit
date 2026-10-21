@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ArrowLeft, Box as BoxIcon, Eye, RotateCcw, Scissors } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Box as BoxIcon, Eye, Plus, RotateCcw, RotateCw, Scissors, Trash2 } from 'lucide-react';
+import { Dialog } from '../components/Dialog';
+import { FurniturePanel, type Pickable } from '../editor/panels/FurniturePanel';
+import { formatLength } from '../model/units';
+import { id as newItemId } from '../model/defaults';
 import type { Pt } from '../geometry/poly';
-import type { Floor, Item, Unit } from '../model/types';
+import type { Floor, Item, ItemTemplate, Unit } from '../model/types';
 import { itemDrop, itemElevation, itemHeight, itemMount, itemOpenBelow, isStairs } from '../model/catalog';
 import { computeWarnings, roomOfPoint, stairOpenings, type WarningOptions, type WarningResult } from '../geometry/warnings';
 import { clipToRect, floorHeight, floorLevels, groundIndex, roomCeiling, SLAB } from '../geometry/levels';
 import { stairBlocks } from '../geometry/stairs';
-import { buildWalls } from '../geometry/wallPieces';
+import { buildWalls, wallColorOf } from '../geometry/wallPieces';
+import { kindInfo, pointPos } from '../geometry/power';
 import { partitionAngle, partitionLength, partitionMid, partitionSpan } from '../geometry/partitions';
 import { roomOuterBox } from '../geometry/walls';
 import { byDepth, depthOf, kindOf } from '../geometry/spaces';
@@ -31,18 +36,36 @@ interface Props {
   unit: Unit;
   settings: WarningOptions['settings'];
   onClose: () => void;
+  /** Editing in 3D (left out = look only). */
+  templates?: ItemTemplate[];
+  onAddItem?: (floorIndex: number, item: Item) => void;
+  onUpdateItem?: (floorIndex: number, id: string, patch: Partial<Item>) => void;
+  onDeleteItem?: (floorIndex: number, id: string) => void;
 }
 
 const ceilingOf = roomCeiling;
 
 /** Wall pieces (mm) → three.js boxes (m). */
 function walls3d(floor: Floor, cut: boolean) {
-  return buildWalls(floor, cut).map((w) => ({
-    key: w.key,
-    glass: w.glass,
-    pos: [((w.x0 + w.x1) / 2) * M, ((w.z0 + w.z1) / 2) * M, ((w.y0 + w.y1) / 2) * M] as [number, number, number],
-    size: [(w.x1 - w.x0) * M, (w.z1 - w.z0) * M, (w.y1 - w.y0) * M] as [number, number, number],
-  }));
+  const rooms = new Map(floor.rooms.map((r) => [r.id, r]));
+  return buildWalls(floor, cut).map((w) => {
+    const r = w.roomId ? rooms.get(w.roomId) : undefined;
+    const color = r && w.side ? wallColorOf(r, w.side) : undefined;
+    const p = color && w.paint;
+    return {
+      key: w.key,
+      glass: w.glass,
+      pos: [((w.x0 + w.x1) / 2) * M, ((w.z0 + w.z1) / 2) * M, ((w.y0 + w.y1) / 2) * M] as [number, number, number],
+      size: [(w.x1 - w.x0) * M, (w.z1 - w.z0) * M, (w.y1 - w.y0) * M] as [number, number, number],
+      paint: p
+        ? {
+            color: color!,
+            pos: [((p.x0 + p.x1) / 2) * M, ((w.z0 + w.z1) / 2) * M, ((p.y0 + p.y1) / 2) * M] as [number, number, number],
+            size: [(p.x1 - p.x0) * M, (w.z1 - w.z0) * M, (p.y1 - p.y0) * M] as [number, number, number],
+          }
+        : undefined,
+    };
+  });
 }
 
 const FLOOR_3D: Record<string, [string, string]> = {
@@ -56,9 +79,9 @@ const FLOOR_3D: Record<string, [string, string]> = {
 };
 
 /** Real steps, rising to the floor above (or the ceiling on the top floor). */
-function StairsMesh({ it, rise, state }: { it: Item; rise: number; state: 'red' | 'yellow' | null }) {
+function StairsMesh({ it, rise, state }: { it: Item; rise: number; state: 'red' | 'yellow' | 'selected' | null }) {
   const blocks = useMemo(() => stairBlocks(it, rise), [it, rise]);
-  const emissive = state === 'red' ? '#7a0000' : state === 'yellow' ? '#6b4e00' : '#000000';
+  const emissive = state === 'selected' ? '#1d4ed8' : state === 'red' ? '#7a0000' : state === 'yellow' ? '#6b4e00' : '#000000';
   return (
     <group position={[it.x * M, 0, it.y * M]} rotation={[0, (-it.rotation * Math.PI) / 180, 0]}>
       {blocks.map((b, i) => (
@@ -77,7 +100,7 @@ function shadeHex(hex: string, k: number): string {
   return '#' + c.getHexString();
 }
 
-function ItemMesh({ it, floor, state, rise }: { it: Item; floor: Floor; state: 'red' | 'yellow' | null; rise: number }) {
+function ItemMesh({ it, floor, state, rise }: { it: Item; floor: Floor; state: 'red' | 'yellow' | 'selected' | null; rise: number }) {
   const room = roomOfPoint(floor, it);
   const ceiling = room ? ceilingOf(floor, room) : DEFAULT_CEILING_3D;
   if (isStairs(it)) return <StairsMesh it={it} rise={rise} state={state} />;
@@ -91,7 +114,7 @@ function ItemMesh({ it, floor, state, rise }: { it: Item; floor: Floor; state: '
     h = 40;
   }
   const color = state === 'red' ? '#ff4d4d' : it.color;
-  const emissive = state === 'red' ? '#7a0000' : state === 'yellow' ? '#6b4e00' : '#000000';
+  const emissive = state === 'selected' ? '#1d4ed8' : state === 'red' ? '#7a0000' : state === 'yellow' ? '#6b4e00' : '#000000';
   const rotY = (-it.rotation * Math.PI) / 180;
   const pos: [number, number, number] = [it.x * M, (y0 + h / 2) * M, it.y * M];
 
@@ -234,7 +257,15 @@ function holesIn(holes: Pt[][], b: { minX: number; minY: number; maxX: number; m
 }
 
 /** One storey: floor surfaces (with stair holes), slab, walls and furniture. */
-function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade }: {
+type Tap = ThreeEvent<MouseEvent>;
+/** A real tap, not the end of turning the view. */
+const isTap = (e: Tap) => e.delta < 8;
+
+function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade, selectedId, onFloorTap, onItemTap, onWallTap }: {
+  onWallTap?: () => void;
+  selectedId?: string;
+  onFloorTap?: (p: Pt) => void;
+  onItemTap?: (id: string) => void;
   floor: Floor;
   below?: Floor;
   warnings: WarningResult;
@@ -268,6 +299,14 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade }: {
   const holeGeos = useMemo(() => (holeShade ? holes.map((h) => new THREE.ShapeGeometry(shapeOf(h, []))) : []), [holes, holeShade]);
   const walls = useMemo(() => walls3d(floor, cut), [floor, cut]);
   useEffect(() => () => [...surfaces.map((s) => s.geo), ...slabs.map((s) => s.geo), ...holeGeos].forEach((g) => g.dispose()), [surfaces, slabs, holeGeos]);
+  const wallTap = (e: Tap) => {
+    e.stopPropagation();
+    if (onWallTap && isTap(e)) onWallTap();
+  };
+  const floorTap = (e: Tap) => {
+    e.stopPropagation();
+    if (onFloorTap && isTap(e)) onFloorTap({ x: e.point.x / M, y: e.point.z / M });
+  };
 
   return (
     <>
@@ -282,16 +321,45 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade }: {
         </mesh>
       ))}
       {surfaces.map(({ r, depth, geo }) => (
-        <mesh key={r.id} geometry={geo} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001 + depth * 0.002, 0]}>
+        <mesh key={r.id} geometry={geo} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001 + depth * 0.002, 0]} onClick={floorTap}>
           <meshStandardMaterial color={(FLOOR_3D[kindOf(r)] ?? FLOOR_3D.room)[dark ? 1 : 0]} side={THREE.DoubleSide} />
         </mesh>
       ))}
       {walls.map((w) => (
-        <mesh key={w.key} position={w.pos}>
+        <mesh key={w.key} position={w.pos} onClick={wallTap}>
           <boxGeometry args={w.size} />
           {w.glass ? <meshStandardMaterial color="#8ec5ff" transparent opacity={0.35} /> : <meshStandardMaterial color={dark ? '#c9ced6' : '#fafafa'} roughness={0.95} />}
         </mesh>
       ))}
+      {walls.map(
+        (w) =>
+          w.paint && (
+            <mesh key={w.key + 'p'} position={w.paint.pos}>
+              <boxGeometry args={w.paint.size} />
+              <meshStandardMaterial color={w.paint.color} roughness={0.9} />
+            </mesh>
+          ),
+      )}
+      {(floor.covers ?? []).map((cv) => (
+        <mesh key={cv.id} position={[(cv.x + cv.width / 2) * M, (-SLAB / 2 + 2) * M, (cv.y + cv.length / 2) * M]} onClick={floorTap}>
+          <boxGeometry args={[cv.width * M, SLAB * M, cv.length * M]} />
+          <meshStandardMaterial color={(FLOOR_3D.room ?? ['#f4ede2', '#3a3f48'])[dark ? 1 : 0]} roughness={0.9} />
+        </mesh>
+      ))}
+      {(floor.points ?? []).map((pp) => {
+        const g = pointPos(floor, pp);
+        if (!g) return null;
+        const info = kindInfo(pp.kind);
+        const w = pp.kind === 'board' || pp.kind === 'switch' ? 220 : 120;
+        const h = pp.heightMm ?? info.heightMm;
+        const horiz = g.along.x !== 0;
+        return (
+          <mesh key={pp.id} position={[(g.pos.x + g.inward.x * 8) * M, h * M, (g.pos.y + g.inward.y * 8) * M]}>
+            <boxGeometry args={[(horiz ? w : 16) * M, 120 * M, (horiz ? 16 : w) * M]} />
+            <meshStandardMaterial color={pp.kind === 'power' ? '#ffd8a8' : '#ffffff'} />
+          </mesh>
+        );
+      })}
       {(floor.partitions ?? []).map((pw) => {
         const { bottom, top } = partitionSpan(floor, pw);
         const len = partitionLength(pw);
@@ -299,29 +367,49 @@ function Storey({ floor, below, warnings, cut, slab, rise, dark, holeShade }: {
         const h = cut && pw.bottomMm <= 0 ? Math.min(top, 1000) - bottom : top - bottom;
         if (h <= 1 || len < 1) return null;
         return (
-          <mesh key={pw.id} position={[m.x * M, (bottom + h / 2) * M, m.y * M]} rotation={[0, -partitionAngle(pw), 0]}>
+          <mesh key={pw.id} position={[m.x * M, (bottom + h / 2) * M, m.y * M]} rotation={[0, -partitionAngle(pw), 0]} onClick={wallTap}>
             <boxGeometry args={[len * M, h * M, pw.thicknessMm * M]} />
-            <meshStandardMaterial color={dark ? '#b9bec6' : '#f2f2f2'} roughness={0.95} />
+            <meshStandardMaterial color={pw.color ?? (dark ? '#b9bec6' : '#f2f2f2')} roughness={0.95} />
           </mesh>
         );
       })}
       {floor.items.map((it) => {
         const room = roomOfPoint(floor, it);
         return (
-          <ItemMesh
+          <group
             key={it.id}
-            it={it}
-            floor={floor}
-            rise={rise ?? (room ? ceilingOf(floor, room) : DEFAULT_CEILING_3D)}
-            state={warnings.red.has(it.id) ? 'red' : warnings.yellow.has(it.id) ? 'yellow' : null}
-          />
+            onClick={(e: Tap) => {
+              e.stopPropagation();
+              if (onItemTap && isTap(e)) onItemTap(it.id);
+            }}
+          >
+            <ItemMesh
+              it={it}
+              floor={floor}
+              rise={rise ?? (room ? ceilingOf(floor, room) : DEFAULT_CEILING_3D)}
+              state={it.id === selectedId ? 'selected' : warnings.red.has(it.id) ? 'red' : warnings.yellow.has(it.id) ? 'yellow' : null}
+            />
+          </group>
         );
       })}
     </>
   );
 }
 
-export default function View3D({ floors, startIndex, multi, homeName, layoutName, unit, settings, onClose }: Props) {
+export default function View3D({ floors, startIndex, multi, homeName, layoutName, unit, settings, onClose, templates = [], onAddItem, onUpdateItem, onDeleteItem }: Props) {
+  const editable = !!(onAddItem && onUpdateItem && onDeleteItem);
+  const [sel, setSel] = useState<{ fi: number; id: string } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [tip, setTip] = useState<string | null>(null);
+  const selItem = sel ? floors[sel.fi]?.items.find((i) => i.id === sel.id) : undefined;
+  useEffect(() => {
+    if (sel && !selItem) setSel(null);
+  }, [sel, selItem]);
+  useEffect(() => {
+    if (!tip) return;
+    const t = setTimeout(() => setTip(null), 3500);
+    return () => clearTimeout(t);
+  }, [tip]);
   const theme = useResolvedTheme();
   const [cut, setCut] = useState(false);
   const [lost, setLost] = useState(false);
@@ -330,6 +418,52 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
   const [show, setShow] = useState<number | 'all'>(multi && floors.length > 1 ? 'all' : Math.min(startIndex, floors.length - 1));
   const [gap, setGap] = useState(0);
   const all = show === 'all';
+  const addTo = all ? Math.min(Math.max(startIndex, 0), floors.length - 1) : (show as number);
+
+  const addPick = (pk: Pickable) => {
+    if (!onAddItem) return;
+    const f = floors[addTo];
+    const src =
+      pk.kind === 'catalog'
+        ? { type: pk.entry.type, label: pk.entry.label, width: pk.entry.width, depth: pk.entry.depth, shape: pk.entry.shape, color: pk.entry.color, mount: pk.entry.mount, heightMm: undefined as number | undefined, elevationMm: pk.entry.elevationMm, wallFixed: pk.entry.wallFixed }
+        : { type: pk.t.type || 'custom', label: pk.t.label, width: pk.t.width, depth: pk.t.depth, shape: pk.t.shape, color: pk.t.color, mount: undefined, heightMm: pk.t.heightMm, elevationMm: undefined, wallFixed: false };
+    // the room the camera looks at, else the first room
+    const look = { x: target.x / M, y: target.z / M };
+    const room = roomOfPoint(f, look) ?? f.rooms[0];
+    let x = room ? room.x + room.width / 2 : look.x;
+    let y = room ? room.y + room.length / 2 : look.y;
+    let rotation = 0;
+    if (room && src.wallFixed) {
+      y = room.y + src.depth / 2; // against the top wall, facing in
+      rotation = 0;
+    }
+    const item: Item = {
+      id: newItemId(),
+      type: src.type,
+      label: src.label,
+      x: Math.round(x),
+      y: Math.round(y),
+      width: src.width,
+      depth: src.depth,
+      rotation,
+      shape: src.shape,
+      color: src.color,
+      ...(src.mount ? { mount: src.mount } : {}),
+      ...(src.heightMm ? { heightMm: src.heightMm } : {}),
+      ...(src.elevationMm ? { elevationMm: src.elevationMm } : {}),
+      ...(src.type === 'stairs' ? { stairs: { style: 'straight' as const, flightWidthMm: 914, turn: 'right' as const, upDir: 0 as const } } : {}),
+    };
+    void x;
+    onAddItem(addTo, item);
+    setSel({ fi: addTo, id: item.id });
+    setAdding(false);
+    setTip(`${item.label} added. Tap the floor to put it there (Top view is easiest).`);
+  };
+  const moveTo = (fi: number, p: { x: number; y: number }) => {
+    if (!sel || !onUpdateItem) return;
+    if (fi !== sel.fi) return setTip(`It's on ${floors[sel.fi].name}. Tap that floor.`);
+    onUpdateItem(sel.fi, sel.id, { x: Math.round(p.x), y: Math.round(p.y) });
+  };
 
   const levels = useMemo(() => floorLevels(floors), [floors]);
   const g = groundIndex(floors);
@@ -470,6 +604,10 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
             {shown.map((i) => (
               <group key={floors[i].id} position={[0, yOf(i) * M, 0]}>
                 <Storey
+                  selectedId={sel?.fi === i ? sel.id : undefined}
+                  onFloorTap={editable ? (p) => moveTo(i, p) : undefined}
+                  onItemTap={editable ? (id) => setSel(sel?.id === id ? null : { fi: i, id }) : undefined}
+                  onWallTap={sel ? () => setTip('That is a wall. Tap the floor (Top view or Cut walls makes it easy).') : undefined}
                   floor={floors[i]}
                   below={floors[i - 1]}
                   warnings={warningsPer[i]}
@@ -484,7 +622,47 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
           </Canvas>
         )}
 
+        {selItem && sel && editable ? (
+          <div className="view3d-edit" role="toolbar" aria-label={`${selItem.label} in 3D`}>
+            <div className="view3d-edit-title">
+              <strong>{selItem.label}</strong>
+              <span>Tap the floor to move it here · {formatLength(itemElevation(selItem), unit)} from the floor</span>
+            </div>
+            <div className="view3d-edit-btns">
+              <button className="icon-btn" aria-label="Turn left" onClick={() => onUpdateItem!(sel.fi, sel.id, { rotation: (selItem.rotation + 270) % 360 })}>
+                <RotateCcw size={19} />
+              </button>
+              <button className="icon-btn" aria-label="Turn right" onClick={() => onUpdateItem!(sel.fi, sel.id, { rotation: (selItem.rotation + 90) % 360 })}>
+                <RotateCw size={19} />
+              </button>
+              <button className="icon-btn" aria-label="Raise" title="Raise 6 inches" onClick={() => onUpdateItem!(sel.fi, sel.id, { elevationMm: itemElevation(selItem) + 152 })}>
+                <ArrowUp size={19} />
+              </button>
+              <button className="icon-btn" aria-label="Lower" title="Lower 6 inches" disabled={itemElevation(selItem) <= 0} onClick={() => onUpdateItem!(sel.fi, sel.id, { elevationMm: Math.max(0, itemElevation(selItem) - 152) })}>
+                <ArrowDown size={19} />
+              </button>
+              <button
+                className="icon-btn danger"
+                aria-label="Delete"
+                onClick={() => {
+                  onDeleteItem!(sel.fi, sel.id);
+                  setSel(null);
+                }}
+              >
+                <Trash2 size={19} />
+              </button>
+              <button className="btn btn-primary" onClick={() => setSel(null)}>
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="view3d-presets">
+          {editable && (
+            <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <Plus size={17} /> Add
+            </button>
+          )}
           <button className="btn" onClick={() => setPreset({ pos: new THREE.Vector3(target.x, target.y + Math.max(span, tall) * 1.6 + 2, target.z + 0.01), n: preset.n + 1 })}>
             <Eye size={17} /> Top
           </button>
@@ -501,6 +679,12 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
             <RotateCcw size={17} /> Inside
           </button>
         </div>
+        )}
+        {tip && (
+          <div className="view3d-tip" role="status">
+            {tip}
+          </div>
+        )}
 
         <div className="view3d-info">
           {heightWarnings.length > 0 ? (
@@ -518,7 +702,12 @@ export default function View3D({ floors, startIndex, multi, homeName, layoutName
           )}
         </div>
       </div>
-      <p className="view3d-help">One finger to turn · pinch to zoom · two fingers to move</p>
+      <p className="view3d-help">{editable ? 'Tap a thing to pick it · ' : ''}One finger to turn · pinch to zoom · two fingers to move</p>
+      {adding && (
+        <Dialog title={`Add to ${multi ? floors[addTo].name : 'the room'}`} subtitle="Tap an item. Then tap the floor in 3D to put it there." onClose={() => setAdding(false)}>
+          <FurniturePanel multi={multi} unit={unit} templates={templates} onPick={addPick} onCustom={() => setTip('Make custom items in the 2D plan.')} onDeleteTemplate={() => {}} />
+        </Dialog>
+      )}
     </div>
   );
 }

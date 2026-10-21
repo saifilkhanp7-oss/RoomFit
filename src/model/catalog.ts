@@ -24,6 +24,10 @@ export interface CatalogEntry {
   wallFixed?: boolean;
   /** Ceiling things: how far the bottom hangs below the ceiling. */
   dropMm?: number;
+  /** Needs electricity. */
+  power?: 'light' | 'heavy' | 'ac';
+  /** Usual height from the floor when added (an AC high on the wall). */
+  elevationMm?: number;
   /** Don't give walking-space warnings for this item (chairs sit close to tables etc). */
   noClearance?: boolean;
   multiOnly?: boolean;
@@ -38,7 +42,7 @@ export const CATALOG: CatalogEntry[] = [
   { type: 'bed-queen', label: 'Queen bed', category: 'Beds', width: fi(5), depth: fi(6, 8), heightMm: fi(1, 8), shape: 'rect', color: '#7aa7e8', wallItem: true, openBelowMm: fi(0, 10) },
   { type: 'bed-bunk', label: 'Bunk bed', category: 'Beds', width: fi(3), depth: fi(6, 6), heightMm: fi(5, 6), shape: 'rect', color: '#5d8fd9', wallItem: true },
   // Study
-  { type: 'study-table', label: 'Study table', category: 'Study', width: fi(4), depth: fi(2), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', wallItem: true, openBelowMm: fi(2, 3) },
+  { type: 'study-table', label: 'Study table', category: 'Study', width: fi(4), depth: fi(2), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', wallItem: true, openBelowMm: fi(2, 3), power: 'light' },
   { type: 'chair', label: 'Chair', category: 'Study', width: fi(1, 8), depth: fi(1, 8), heightMm: fi(3), shape: 'rect', color: '#a7835e', noClearance: true, openBelowMm: fi(1, 4) },
   { type: 'bookshelf', label: 'Bookshelf', category: 'Study', width: fi(2, 6), depth: fi(1), heightMm: fi(5), shape: 'rect', color: '#b58b62', wallItem: true },
   // Storage
@@ -53,21 +57,23 @@ export const CATALOG: CatalogEntry[] = [
   { type: 'sofa', label: 'Sofa', category: 'Living', width: fi(5), depth: fi(2, 9), heightMm: fi(2, 9), shape: 'rect', color: '#8fb98b', wallItem: true },
   { type: 'bean-bag', label: 'Bean bag', category: 'Living', width: fi(2, 6), depth: fi(2, 6), heightMm: fi(2), shape: 'round', color: '#e3a35c' },
   { type: 'coffee-table', label: 'Coffee table', category: 'Living', width: fi(3), depth: fi(1, 6), heightMm: fi(1, 6), shape: 'rect', color: '#c9a27a', openBelowMm: fi(1, 2) },
-  { type: 'tv-unit', label: 'TV unit', category: 'Living', width: fi(4), depth: fi(1, 4), heightMm: fi(1, 8), shape: 'rect', color: '#6f6a66', wallItem: true, openBelowMm: 0 },
+  { type: 'tv-unit', label: 'TV unit', category: 'Living', width: fi(4), depth: fi(1, 4), heightMm: fi(1, 8), shape: 'rect', color: '#6f6a66', wallItem: true, openBelowMm: 0, power: 'light' },
   // Kitchen / dining
-  { type: 'fridge', label: 'Fridge', category: 'Kitchen', width: fi(2), depth: fi(2, 2), heightMm: fi(5, 6), shape: 'rect', color: '#b9c4cf', wallItem: true },
+  { type: 'fridge', label: 'Fridge', category: 'Kitchen', width: fi(2), depth: fi(2, 2), heightMm: fi(5, 6), shape: 'rect', color: '#b9c4cf', wallItem: true, power: 'heavy' },
   { type: 'dining-table', label: 'Dining table', category: 'Kitchen', width: fi(4), depth: fi(2, 6), heightMm: fi(2, 6), shape: 'rect', color: '#c9a27a', openBelowMm: fi(2, 3) },
   { type: 'stove', label: 'Stove counter', category: 'Kitchen', width: fi(4), depth: fi(2), heightMm: fi(2, 10), shape: 'rect', color: '#9aa3ab', wallItem: true },
   // Bathroom
   { type: 'toilet', label: 'Toilet (WC)', category: 'Bathroom', width: fi(1, 3), depth: fi(2, 3), heightMm: fi(2, 7), shape: 'rect', color: '#e8eef2', wallItem: true, noClearance: true },
   { type: 'basin', label: 'Wash basin', category: 'Bathroom', width: fi(1, 8), depth: fi(1, 4), heightMm: fi(2, 10), shape: 'rect', color: '#e8eef2', wallItem: true, noClearance: true, openBelowMm: fi(2) },
   { type: 'shower', label: 'Shower area', category: 'Bathroom', width: fi(3), depth: fi(3), shape: 'rect', color: '#b9dcef', mount: 'under', noClearance: true },
-  { type: 'washing-machine', label: 'Washing machine', category: 'Bathroom', width: fi(2), depth: fi(2), heightMm: fi(2, 10), shape: 'rect', color: '#d5dbe0', wallItem: true },
+  { type: 'geyser', label: 'Geyser', category: 'Bathroom', width: fi(1, 4), depth: fi(1, 2), heightMm: fi(1, 8), shape: 'rect', color: '#eef1f3', wallItem: true, wallFixed: true, noClearance: true, power: 'heavy', elevationMm: fi(5, 6) },
+  { type: 'washing-machine', label: 'Washing machine', category: 'Bathroom', width: fi(2), depth: fi(2), heightMm: fi(2, 10), shape: 'rect', color: '#d5dbe0', wallItem: true, power: 'heavy' },
   // Other
-  { type: 'cooler', label: 'Cooler', category: 'Other', width: fi(1, 6), depth: fi(1, 6), heightMm: fi(4), shape: 'rect', color: '#9fc7d6' },
+  { type: 'cooler', label: 'Cooler', category: 'Other', width: fi(1, 6), depth: fi(1, 6), heightMm: fi(4), shape: 'rect', color: '#9fc7d6', power: 'light' },
   { type: 'mirror', label: 'Mirror', category: 'Other', width: fi(2), depth: fi(0, 4), heightMm: fi(5), shape: 'rect', color: '#bfe0f2', wallItem: true, noClearance: true, wallFixed: true },
   { type: 'dustbin', label: 'Dustbin', category: 'Other', width: fi(1), depth: fi(1), heightMm: fi(1, 6), shape: 'round', color: '#7d8a8f', noClearance: true },
   { type: 'fan', label: 'Ceiling fan', category: 'Other', width: fi(4), depth: fi(4), shape: 'round', color: '#9aa0a6', mount: 'ceiling', noClearance: true },
+  { type: 'ac', label: 'AC (split)', category: 'Other', width: fi(3, 2), depth: fi(0, 9), heightMm: fi(1), shape: 'rect', color: '#e6edf2', wallItem: true, wallFixed: true, noClearance: true, power: 'ac', elevationMm: fi(7) },
   { type: 'lamp', label: 'Hanging lamp', category: 'Other', width: fi(1, 4), depth: fi(1, 4), shape: 'round', color: '#f2c94c', mount: 'ceiling', noClearance: true, dropMm: fi(2) },
   { type: 'rug', label: 'Rug', category: 'Other', width: fi(5), depth: fi(3), shape: 'rect', color: '#d9b8c4', mount: 'under', noClearance: true },
   // Vehicles (top view, front of the vehicle = top edge)
@@ -128,6 +134,12 @@ export function itemSpan(item: Item): { bottom: number; top: number; solidBottom
 /** How far a ceiling thing (fan, lamp) hangs below the ceiling. */
 export function itemDrop(item: Item): number {
   return catalogEntry(item.type)?.dropMm ?? 305;
+}
+
+/** What electricity it needs: from the item, else the catalog. */
+export function itemPower(item: Item): 'none' | 'light' | 'heavy' | 'ac' {
+  if (item.power) return item.power;
+  return catalogEntry(item.type)?.power ?? 'none';
 }
 
 export function isWallFixed(item: Item): boolean {

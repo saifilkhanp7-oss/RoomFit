@@ -3,8 +3,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   AlertTriangle, ArrowLeft, Box, ChevronDown, Copy, DoorOpen, Grid3x3, Image as ImageIcon, Layers, Maximize, Minus,
   MoreHorizontal, Pencil, Plus, Redo2, RotateCcw, RotateCw, Ruler, Settings as SettingsIcon, Share2, Sofa, SquarePlus,
-  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine, Calculator, BrickWall, Route, PackageOpen, Users,
+  Trash2, Undo2, X, AppWindow, FileDown, HelpCircle, Eye, UserRound, SquareDashed, Car, ArrowDownToLine, Calculator, BrickWall, Route, PackageOpen, Users, Plug, Footprints,
 } from 'lucide-react';
+import { PointPanel } from '../editor/panels/PointPanel';
+import { CoverPanel } from '../editor/panels/CoverPanel';
+import { hitPoint, kindInfo, pointPos } from '../geometry/power';
 import { MyThingsDialog } from '../editor/MyThingsDialog';
 import { RoommatesDialog } from '../editor/RoommatesDialog';
 import { checkRoute, type RouteResult } from '../geometry/route';
@@ -32,9 +35,9 @@ import { useResolvedTheme } from '../hooks/useTheme';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { fitView, floorBounds, screenToWorld, zoomAt } from '../geometry/view';
 import { itemBox, itemPoly, normAngle, rotationHandle } from '../geometry/items';
-import { distPointSeg, pointInPoly, type Poly, type Pt } from '../geometry/poly';
+import { distPointSeg, pointInPoly, polyBox, type Poly, type Pt } from '../geometry/poly';
 import { hitWall, innerWallOf, openingGeom, sideLine } from '../geometry/walls';
-import { computeWarnings, roomOfPoint, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warning } from '../geometry/warnings';
+import { computeWarnings, coverHeadroom, roomOfPoint, stairOpenings, DEFAULT_SILL, DEFAULT_WINDOW_H, type Warning } from '../geometry/warnings';
 import { rotationFacingWall, snapItemBox, snapRoom, type Guide } from '../geometry/snapping';
 import { snapMeasurePoint } from '../geometry/measure';
 import * as ops from '../model/ops';
@@ -50,7 +53,7 @@ import './Editor.css';
 
 const View3D = lazy(() => import('../three/View3D'));
 
-type Mode = 'select' | 'measure' | 'door' | 'window' | 'wall' | 'zone';
+type Mode = 'select' | 'measure' | 'door' | 'window' | 'wall' | 'zone' | 'plug' | 'cover';
 type Sheet = null | 'hall' | 'makeMulti' | 'addFloorMenu' | 'account' | 'add' | 'props' | 'warnings' | 'rooms' | 'addRoom' | 'custom' | 'layouts' | 'share' | 'export' | 'more' | 'settings' | 'floorMenu' | 'deleteRoom' | 'estimate' | 'mythings' | 'roommates';
 
 // Carry zoom + floor over when switching layouts, so "Layout A" vs "Layout B" compare at the same spot.
@@ -136,7 +139,9 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
   const selRoom = selection?.kind === 'room' ? floor.rooms.find((r) => r.id === selection.id) : undefined;
   const selWall = selection?.kind === 'partition' ? floor.partitions?.find((p) => p.id === selection.id) : undefined;
   const selZone = selection?.kind === 'zone' ? floor.zones?.find((z) => z.id === selection.id) : undefined;
-  const sel: Selection = selItem || selOpening || selRoom || selWall || selZone ? selection : null;
+  const selPoint = selection?.kind === 'point' ? floor.points?.find((z) => z.id === selection.id) : undefined;
+  const selCover = selection?.kind === 'cover' ? floor.covers?.find((z) => z.id === selection.id) : undefined;
+  const sel: Selection = selItem || selOpening || selRoom || selWall || selZone || selPoint || selCover ? selection : null;
   const people = home.people ?? [];
   const [zonePerson, setZonePerson] = useState<string | null>(null);
   const [route, setRoute] = useState<RouteDrawing | null>(null);
@@ -243,6 +248,19 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
         },
       };
     }
+    if (mode === 'cover') {
+      const a = roundPt(p);
+      let b: Pt | null = null;
+      return {
+        move: (x, y) => {
+          b = roundPt(world(x, y));
+          setDraft({ a, b });
+        },
+        end: (moved) => {
+          if (moved && b) addCoverRect(a, b);
+        },
+      };
+    }
     if (mode === 'wall' || mode === 'zone') {
       const a = mode === 'wall' ? snapMeasurePoint(f, p, 14 / zoom) : roundPt(p);
       let b: Pt | null = null;
@@ -270,6 +288,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       }
     }
     if (selZone && Math.hypot(p.x - (selZone.x + selZone.width), p.y - (selZone.y + selZone.length)) < 18 / zoom) return zoneResizeSession(selZone.id);
+    if (selCover && Math.hypot(p.x - (selCover.x + selCover.width), p.y - (selCover.y + selCover.length)) < 18 / zoom) return coverResizeSession(selCover.id);
 
     // rotation handle of the selected item
     const cur = selection?.kind === 'item' ? f.items.find((i) => i.id === selection.id) : undefined;
@@ -281,12 +300,16 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     const it = hitItem(p);
     if (it) return it.locked ? null : itemSession(it, p);
 
+    const pp = hitPoint(f, p, 6 / zoom);
+    if (pp) return pointSession(pp.id, p);
+
     const op = hitOpening(p);
     if (op) return openingSession(op.id, p);
 
     const pw = hitPartition(f, p, 8 / zoom);
     if (pw) return wallMoveSession(pw.id, p);
     if (selZone && inZone(selZone, p)) return zoneMoveSession(selZone.id, p);
+    if (selCover && inZone(selCover, p)) return coverMoveSession(selCover.id, p);
 
     if (selection?.kind === 'room' && f.rooms.length > 1) {
       const r = f.rooms.find((x) => x.id === selection.id);
@@ -459,6 +482,54 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       edit((f) => ops.updatePartition(f, pid, { [end]: roundPt(s) }), { history: false });
     });
   };
+  const coverMoveSession = (cid: string, p0: Pt) => {
+    const c0 = floorRef.current.covers!.find((x) => x.id === cid)!;
+    return dragSession((q) => edit((f) => ops.updateCover(f, cid, { x: Math.round(c0.x + q.x - p0.x), y: Math.round(c0.y + q.y - p0.y) }), { history: false }));
+  };
+  const coverResizeSession = (cid: string) => {
+    const c0 = floorRef.current.covers!.find((x) => x.id === cid)!;
+    return dragSession((q) => edit((f) => ops.updateCover(f, cid, { width: Math.max(100, Math.round(q.x - c0.x)), length: Math.max(100, Math.round(q.y - c0.y)) }), { history: false }));
+  };
+  const addCoverRect = (a: Pt, b: Pt) => {
+    setDraft(null);
+    let r = { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
+    // keep it on the stair opening
+    const holes = stairOpenings(floorBelow).map((so) => polyBox(so.poly));
+    const hole = holes.find((h) => h.minX < r.maxX && r.minX < h.maxX && h.minY < r.maxY && r.minY < h.maxY);
+    if (!hole) return toast('Drag over the stair opening');
+    r = { minX: Math.max(r.minX, hole.minX), minY: Math.max(r.minY, hole.minY), maxX: Math.min(r.maxX, hole.maxX), maxY: Math.min(r.maxY, hole.maxY) };
+    if (r.maxX - r.minX < 100 || r.maxY - r.minY < 100) return toast('Too small. Drag across the stairs.');
+    const cv = { id: newId(), x: Math.round(r.minX), y: Math.round(r.minY), width: Math.round(r.maxX - r.minX), length: Math.round(r.maxY - r.minY) };
+    edit((f) => ops.addCover(f, cv));
+    setMode('select');
+    setSelection({ kind: 'cover', id: cv.id });
+    const hr = coverHeadroom(floorBelow, cv);
+    toast(isFinite(hr) ? `Floor added. Head room on the stairs under it: ${formatLength(Math.max(0, hr), unit)}` : 'Floor added over the stairs');
+  };
+  const pointSession = (pid: string, p0: Pt): DragSession => {
+    const f0 = floorRef.current;
+    const pt = f0.points!.find((x) => x.id === pid)!;
+    const room = f0.rooms.find((r) => r.id === pt.roomId);
+    if (!room) return dragSession(() => {});
+    const horiz = pt.side === 'top' || pt.side === 'bottom';
+    const along = (q: Pt) => (horiz ? q.x - room.x : q.y - room.y);
+    const grab = along(p0) - pt.offsetMm;
+    const len = sideLine(room, pt.side).length;
+    return dragSession((q) => {
+      setSelection({ kind: 'point', id: pid });
+      edit((f) => ops.updatePoint(f, pid, { offsetMm: Math.round(Math.max(0, Math.min(len, along(q) - grab))) }), { history: false });
+    });
+  };
+  const addPointAt = (p: Pt) => {
+    const f = floorRef.current;
+    const hit = hitWall(f, p, 24 / viewRef.current!.zoom);
+    if (!hit) return toast('Tap on a wall');
+    const pt = { id: newId(), roomId: hit.room.id, side: hit.side, offsetMm: Math.round(Math.max(0, Math.min(sideLine(hit.room, hit.side).length, hit.along))), kind: 'board' as const };
+    edit((fl) => ops.addPoint(fl, pt));
+    setSelection({ kind: 'point', id: pt.id });
+    toast('Switchboard added. Change the kind in its settings, or tap another wall.');
+  };
+
   const zoneMoveSession = (zid: string, p0: Pt) => {
     const z0 = floorRef.current.zones!.find((x) => x.id === zid)!;
     return dragSession((q) => edit((f) => ops.updateZone(f, zid, { x: Math.round(z0.x + q.x - p0.x), y: Math.round(z0.y + q.y - p0.y) }), { history: false }));
@@ -507,6 +578,12 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       addOpeningAt(p, mode);
       return;
     }
+    if (mode === 'plug') return addPointAt(p);
+    if (mode === 'cover') {
+      if (!draft) setDraft({ a: roundPt(p) });
+      else addCoverRect(draft.a, roundPt(p));
+      return;
+    }
     if (mode === 'wall' || mode === 'zone') {
       const q = mode === 'wall' ? snapMeasurePoint(f, p, 14 / zoom) : roundPt(p);
       if (!draft) setDraft({ a: q });
@@ -516,11 +593,15 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     }
     const it = hitItem(p);
     if (it) return setSelection({ kind: 'item', id: it.id });
+    const pp = hitPoint(f, p, 6 / zoom);
+    if (pp) return setSelection({ kind: 'point', id: pp.id });
     const op = hitOpening(p);
     if (op) return setSelection({ kind: 'opening', id: op.id });
     const pw = hitPartition(f, p, 8 / zoom);
     if (pw) return setSelection({ kind: 'partition', id: pw.id });
     // a space is picked first; tap it again to get the room under it
+    const cv = [...(f.covers ?? [])].reverse().find((x) => inZone(x, p));
+    if (cv && !(selection?.kind === 'cover' && selection.id === cv.id)) return setSelection({ kind: 'cover', id: cv.id });
     const zn = [...(f.zones ?? [])].reverse().find((x) => inZone(x, p));
     if (zn && !(selection?.kind === 'zone' && selection.id === zn.id)) return setSelection({ kind: 'zone', id: zn.id });
     const room = roomOfPoint(f, p);
@@ -598,8 +679,24 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       ...(src.mount ? { mount: src.mount } : {}),
       ...(src.heightMm ? { heightMm: src.heightMm } : {}),
       ...(home.meId && src.type !== 'stairs' ? { owner: home.meId } : {}),
+      ...(pk.kind === 'catalog' && pk.entry.elevationMm ? { elevationMm: pk.entry.elevationMm } : {}),
     };
     if (item.type === 'stairs') item.stairs = { style: 'straight', flightWidthMm: 914, turn: 'right', upDir: 0 };
+    // things fixed to a wall (AC, geyser, mirror, shelf) go flat against the nearest wall
+    if (!at && room && pk.kind === 'catalog' && pk.entry.wallFixed) {
+      const sides: [Side, number][] = [
+        ['top', pos.y - room.y],
+        ['bottom', room.y + room.length - pos.y],
+        ['left', pos.x - room.x],
+        ['right', room.x + room.width - pos.x],
+      ];
+      sides.sort((a, b) => a[1] - b[1]);
+      const wall = sides[0][0];
+      const d2 = item.depth / 2;
+      const x = wall === 'left' ? room.x + d2 : wall === 'right' ? room.x + room.width - d2 : item.x;
+      const y = wall === 'top' ? room.y + d2 : wall === 'bottom' ? room.y + room.length - d2 : item.y;
+      item = { ...item, x: Math.round(x), y: Math.round(y), rotation: rotationFacingWall(wall) };
+    }
 
     // Dropped near a wall: turn beds/cupboards to face into the room and push them flush.
     if (at && room && settings.snap) {
@@ -647,6 +744,8 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     else if (selOpening) edit((f) => ops.deleteOpening(f, selOpening.id));
     else if (selWall) edit((f) => ops.deletePartition(f, selWall.id));
     else if (selZone) edit((f) => ops.deleteZone(f, selZone.id));
+    else if (selPoint) edit((f) => ops.deletePoint(f, selPoint.id));
+    else if (selCover) edit((f) => ops.deleteCover(f, selCover.id));
     else if (selRoom && floor.rooms.length > 1) return setSheet('deleteRoom');
     else return;
     setSelection(null);
@@ -714,6 +813,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
 
   const pickWarning = (w: Warning) => {
     if (w.itemIds[0]) setSelection({ kind: 'item', id: w.itemIds[0] });
+    else if (w.id.startsWith('headroom:')) setSelection({ kind: 'cover', id: w.id.slice(9) });
     centreOn(w.focus);
     if (!wide) setSheet(null);
   };
@@ -768,6 +868,11 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
     } else if (selRoom) poly = [{ x: selRoom.x, y: selRoom.y }, { x: selRoom.x + selRoom.width, y: selRoom.y }];
     else if (selWall) poly = partitionPoly(selWall);
     else if (selZone) poly = [{ x: selZone.x, y: selZone.y }, { x: selZone.x + selZone.width, y: selZone.y }];
+    else if (selCover) poly = [{ x: selCover.x, y: selCover.y }, { x: selCover.x + selCover.width, y: selCover.y }];
+    else if (selPoint) {
+      const g = pointPos(floor, selPoint);
+      if (g) poly = [g.pos, { x: g.pos.x + g.inward.x * 200, y: g.pos.y + g.inward.y * 200 }];
+    }
     if (!poly) return null;
     const xs = poly.map((p) => p.x * view.zoom + view.panX);
     const ys = poly.map((p) => p.y * view.zoom + view.panY);
@@ -828,6 +933,17 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       );
     if (selWall)
       return <PartitionPanel wall={selWall} floor={floor} unit={unit} onChange={(patch) => edit((f) => ops.updatePartition(f, selWall.id, patch))} onDelete={deleteSelected} />;
+    if (selPoint) return <PointPanel point={selPoint} unit={unit} onChange={(patch) => edit((f) => ops.updatePoint(f, selPoint.id, patch))} onDelete={deleteSelected} />;
+    if (selCover)
+      return (
+        <CoverPanel
+          cover={selCover}
+          unit={unit}
+          headroom={coverHeadroom(floorBelow, selCover)}
+          onChange={(patch) => edit((f) => ops.updateCover(f, selCover.id, patch))}
+          onDelete={deleteSelected}
+        />
+      );
     if (selZone)
       return (
         <ZonePanel
@@ -861,6 +977,10 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
       ? selOpening.kind === 'door'
         ? 'Door'
         : 'Window'
+      : selPoint
+        ? kindInfo(selPoint.kind).label
+        : selCover
+        ? 'Floor over stairs'
       : selWall
         ? 'Inner wall'
         : selZone
@@ -885,6 +1005,12 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             ? draft
               ? 'Tap where the wall ends'
               : 'Drag where the wall goes, or tap its two ends'
+            : mode === 'plug'
+              ? 'Tap a wall to add a switchboard or plug point'
+              : mode === 'cover'
+                ? draft
+                  ? 'Tap the opposite corner'
+                  : 'Drag over the stair opening where the floor goes'
             : mode === 'zone'
               ? draft
                 ? 'Tap the opposite corner'
@@ -1009,6 +1135,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                 measurements,
                 measureDraft: mode === 'measure' ? draft : null,
                 wallDraft: mode === 'wall' ? draft : null,
+                coverDraft: mode === 'cover' ? draft : null,
                 zoneDraft: mode === 'zone' && draft ? { ...draft, color: people.find((x) => x.id === (zonePerson ?? people[0]?.id))?.color ?? '#888' } : null,
                 people,
                 route,
@@ -1118,7 +1245,7 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
                   <Pencil size={19} />
                 </button>
               )}
-              {(selItem || selOpening || selWall || selZone || (selRoom && floor.rooms.length > 1)) && (
+              {(selItem || selOpening || selWall || selZone || selPoint || selCover || (selRoom && floor.rooms.length > 1)) && (
                 <button className="icon-btn danger" aria-label="Delete" onClick={deleteSelected}>
                   <Trash2 size={19} />
                 </button>
@@ -1156,6 +1283,17 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             <button className={`tool-btn${mode === 'window' ? ' on' : ''}`} aria-pressed={mode === 'window'} onClick={() => setMode(mode === 'window' ? 'select' : 'window')}>
               <AppWindow size={20} />
               <span>Window</span>
+            </button>
+            <button
+              className={`tool-btn${mode === 'plug' ? ' on' : ''}`}
+              aria-pressed={mode === 'plug'}
+              onClick={() => {
+                setMode(mode === 'plug' ? 'select' : 'plug');
+                setSelection(null);
+              }}
+            >
+              <Plug size={20} />
+              <span>Plug</span>
             </button>
             <button
               className={`tool-btn${mode === 'wall' ? ' on' : ''}`}
@@ -1264,6 +1402,19 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
             <button className="btn" onClick={() => setSheet('hall')}>
               <SquareDashed size={17} /> Add hall / lobby (whole home size)
             </button>
+            {stairOpenings(floorBelow).length > 0 && (
+              <button
+                className="btn"
+                onClick={() => {
+                  setSheet(null);
+                  setSelection(null);
+                  setDraft(null);
+                  setMode('cover');
+                }}
+              >
+                <Footprints size={17} /> Add floor over the stairs
+              </button>
+            )}
             {multi ? (
               <button className="btn btn-ghost" onClick={addBasementFloor}>
                 <Car size={17} /> Add basement / parking floor
@@ -1586,7 +1737,20 @@ function EditorInner({ homeId, layoutId, show3d }: { homeId: string; layoutId: s
 
       {show3d && (
         <Suspense fallback={<div className="three-loading">Loading 3D…</div>}>
-          <View3D floors={layout.floors} startIndex={floorIndex} multi={multi} homeName={home.name} layoutName={layout.name} unit={unit} settings={settings} onClose={() => navigate(`/edit/${homeId}/${layoutId}`, true)} />
+          <View3D
+            floors={layout.floors}
+            startIndex={floorIndex}
+            multi={multi}
+            homeName={home.name}
+            layoutName={layout.name}
+            unit={unit}
+            settings={settings}
+            templates={templates}
+            onAddItem={(fi, item) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.addItem(f, home.meId ? { ...item, owner: home.meId } : item) : f)) }))}
+            onUpdateItem={(fi, id, patch) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.updateItem(f, id, patch) : f)) }))}
+            onDeleteItem={(fi, id) => S.editLayout(homeId, layoutId, (l) => ({ ...l, floors: l.floors.map((f, i) => (i === fi ? ops.deleteItem(f, id) : f)) }))}
+            onClose={() => navigate(`/edit/${homeId}/${layoutId}`, true)}
+          />
         </Suspense>
       )}
     </div>

@@ -56,6 +56,16 @@ export function Help() {
           </ul>
         </section>
         <section>
+          <h2>Wall colours</h2>
+          <ul>
+            <li>
+              Select a room → <strong>Wall colour</strong>. Pick a colour for all walls, or tap Top / Right / Bottom / Left wall (as on the plan) to paint just that one. The rainbow square lets you pick any
+              colour.
+            </li>
+            <li>The plan shows a coloured line inside painted walls, and the 3D view shows the colours. Inner walls have their own colour too.</li>
+          </ul>
+        </section>
+        <section>
           <h2>Walls inside a room</h2>
           <ul>
             <li>
@@ -66,6 +76,20 @@ export function Help() {
               it). Drag the round ends to change it.
             </li>
             <li>It counts in the bricks, cement and paint. A wall standing on the floor also takes away tiles under it.</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Plug points and switchboards</h2>
+          <ul>
+            <li>
+              Tap <strong>Plug</strong>, then tap a wall. Select it to choose: <strong>Switchboard</strong>, <strong>Plug point</strong>, <strong>Power point (16A)</strong> or <strong>Switches only</strong>. Drag
+              it along the wall.
+            </li>
+            <li>
+              Once you've marked plugs, things that need electricity get warnings: "Study table is 7′ from the nearest plug point. Use a 10 ft extension cord", or "AC has no power point on its wall".
+              Fridges, washing machines and geysers should have a plug close by (no extension cord).
+            </li>
+            <li>Any item can be set to need a plug in its settings (e.g. a bed where you charge your phone).</li>
           </ul>
         </section>
         <section>
@@ -178,6 +202,10 @@ export function Help() {
               if something is too tall there.
             </li>
             <li>
+              Upstairs, <strong>Rooms → Add floor over the stairs</strong> and drag over the part of the stair opening that has floor (usually over the low steps). You get a warning if the people
+              going up have less than 6 ft of head room under it.
+            </li>
+            <li>
               Tap the current floor tab → <strong>Floor height</strong> to set the height from this floor to the next (slab included). By default it's the highest ceiling + 6″.
             </li>
           </ul>
@@ -185,6 +213,10 @@ export function Help() {
         <section>
           <h2>3D view</h2>
           <ul>
+            <li>
+              <strong>Add things in 3D:</strong> tap <strong>Add</strong>, pick an item, then tap the floor where it goes (the Top view or Cut walls makes this easy). Tap any thing to pick it: turn it,
+              raise or lower it (e.g. a suitcase on a cupboard), or delete it. It's the same plan as in 2D.
+            </li>
             <li>Set the ceiling height in the room settings and the height of furniture to check tall things. Typical heights are used if you don't.</li>
             <li>
               Homes with more floors: pick <strong>All floors</strong> to see them stacked, or one floor on its own. Drag <strong>Space between floors</strong> to pull them apart and look inside. Stairs are shown as real

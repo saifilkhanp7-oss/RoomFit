@@ -1,3 +1,4 @@
+import { PaintPicker } from './WallColorPicker';
 import { RotateCw, Trash2 } from 'lucide-react';
 import type { Floor, Partition, Unit } from '../../model/types';
 import { LengthInput } from '../../components/LengthInput';
@@ -73,6 +74,7 @@ export function PartitionPanel({ wall, floor, unit, onChange, onDelete }: Props)
           {wall.bottomMm > 0 ? 'Things lower than the gap can go under it, like a cupboard.' : 'It stands on the floor, so no tiles under it.'}
         </p>
       </div>
+      <PaintPicker value={wall.color} onChange={(color) => onChange({ color })} />
       <p className="hint">Counted in the bricks, cement, paint and tiles cost.</p>
 
       <div className="panel-actions">

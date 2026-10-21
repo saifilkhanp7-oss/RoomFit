@@ -1,6 +1,6 @@
 import { isBasementName } from '../geometry/levels';
 // Pure edit operations on a floor or layout. The store wraps these with undo history.
-import type { Floor, Home, Item, Layout, Opening, Partition, Room, RoomKind, Side, Zone } from './types';
+import type { Cover, Floor, Home, Item, Layout, Opening, Partition, PowerPoint, Room, RoomKind, Side, Zone } from './types';
 import { id as newItemId } from './defaults';
 import { cloneLayoutFresh, floorName, id, makeFloor, makeRoom } from './defaults';
 import { innerWallOf } from '../geometry/walls';
@@ -158,6 +158,7 @@ export function deleteRoom(f: Floor, roomId: string): Floor {
     rooms: f.rooms.filter((r) => r.id !== roomId),
     openings: f.openings.filter((o) => o.roomId !== roomId),
     items: f.items.filter((it) => !gone.has(it.id)),
+    ...(f.points ? { points: f.points.filter((p) => p.roomId !== roomId) } : {}),
   };
 }
 
@@ -323,4 +324,28 @@ export function mergeRoommateThings(mine: Home, theirs: Home, personId: string):
     };
   });
   return { home: { ...mine, people: nextPeople, layouts }, count };
+}
+
+// ---------- plug points & switchboards ----------
+
+export function addPoint(f: Floor, p: PowerPoint): Floor {
+  return { ...f, points: [...(f.points ?? []), p] };
+}
+export function updatePoint(f: Floor, pid: string, patch: Partial<PowerPoint>): Floor {
+  return { ...f, points: (f.points ?? []).map((p) => (p.id === pid ? { ...p, ...patch } : p)) };
+}
+export function deletePoint(f: Floor, pid: string): Floor {
+  return { ...f, points: (f.points ?? []).filter((p) => p.id !== pid) };
+}
+
+// ---------- floor over the stairs ----------
+
+export function addCover(f: Floor, c: Cover): Floor {
+  return { ...f, covers: [...(f.covers ?? []), c] };
+}
+export function updateCover(f: Floor, cid: string, patch: Partial<Cover>): Floor {
+  return { ...f, covers: (f.covers ?? []).map((c) => (c.id === cid ? { ...c, ...patch } : c)) };
+}
+export function deleteCover(f: Floor, cid: string): Floor {
+  return { ...f, covers: (f.covers ?? []).filter((c) => c.id !== cid) };
 }

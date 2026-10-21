@@ -55,6 +55,8 @@ export interface Partition {
   bottomMm: number;
   /** Height of its top above the floor; not set = up to the ceiling. */
   topMm?: number;
+  /** Paint colour. */
+  color?: string;
 }
 
 export interface LayoutView {
@@ -150,6 +152,32 @@ export interface Floor {
   partitions?: Partition[];
   /** Roommates' own spaces. */
   zones?: Zone[];
+  /** Plug points, switchboards and power points on the walls. */
+  points?: PowerPoint[];
+  /** Floor built over part of the stair opening from the floor below. */
+  covers?: Cover[];
+}
+
+export type PowerKind = 'board' | 'socket' | 'power' | 'switch';
+
+/** Something on a wall for electricity, placed like a door: a room side and a distance along it. */
+export interface PowerPoint {
+  id: string;
+  roomId: string;
+  side: Side;
+  offsetMm: number;
+  kind: PowerKind;
+  /** Height from the floor. */
+  heightMm?: number;
+}
+
+/** A piece of floor over the stairs (the stairs go on under it). */
+export interface Cover {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  length: number;
 }
 
 export type RoomKind = 'room' | 'hall' | 'bathroom' | 'kitchen' | 'balcony' | 'parking' | 'store';
@@ -164,6 +192,10 @@ export interface Room {
   width: number; // inner size
   length: number;
   ceilingMm?: number;
+  /** Paint colour of the walls inside this room. */
+  wallColor?: string;
+  /** One wall painted differently. */
+  sideColors?: Partial<Record<Side, string>>;
 }
 
 export interface SharedWall {
@@ -218,6 +250,8 @@ export interface Item {
   };
   /** Whose it is (roommate id); not set = shared. */
   owner?: string;
+  /** Needs electricity: 'light' (any plug, an extension is OK), 'heavy' (its own point nearby), 'none'. Default from the catalog. */
+  power?: 'none' | 'light' | 'heavy';
 }
 
 export interface ItemTemplate {

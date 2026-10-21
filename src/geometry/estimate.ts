@@ -131,6 +131,19 @@ export function tileArea(floor: Floor, r: Room, below?: Floor): number {
     const c = clipToRect(so.poly, box);
     if (c.length >= 3) area -= polyArea(c);
   }
+  // floor built over part of the stairs gets tiles again
+  for (const cv of floor.covers ?? []) {
+    const c = clipToRect(
+      [
+        { x: cv.x, y: cv.y },
+        { x: cv.x + cv.width, y: cv.y },
+        { x: cv.x + cv.width, y: cv.y + cv.length },
+        { x: cv.x, y: cv.y + cv.length },
+      ],
+      box,
+    );
+    if (c.length >= 3) area += polyArea(c);
+  }
   for (const p of floor.partitions ?? []) {
     if (p.bottomMm > 0 || spaceOfPoint(floor, partitionMid(p))?.id !== r.id) continue;
     area -= partitionLength(p) * p.thicknessMm;

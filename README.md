@@ -21,11 +21,15 @@ See [spec.md](spec.md) for the full feature list.
 - Drag, rotate, snap, colour, label, lock, undo/redo, duplicate
 - Warnings: overlap, outside the room, in a wall, on stairs, blocking a door, tight walking space, **no space to open car doors, gate narrower than the car**, and height checks
 - **Building cost** (bricks, cement, paint, tiles): brick size, mortar gap and price → bricks for walls (doors/windows taken out, shared walls counted once), inner walls, stairs and ceilings; cement bags for mortar, plaster and tile bed; paint litres from wall faces (coats, coverage, ceilings, outside); tile size and price for all rooms or per room (or no tiles). Saved per layout, editable any time
+- **Plug points & switchboards** on walls; warnings when a study table, TV, fridge, AC or geyser is too far from a plug, with the extension cord length to buy
+- **Floor over the stairs**: drag floor over part of the stair opening; warning when head room on the stairs under it is below 6 ft
 - **Walls inside a room**: any length/angle, full, half or "from the ceiling down" (a cupboard fits under), counted in all costs
 - **Will it get in?**: carries a sofa/fridge from the main door (or up the stairs) to its spot — straight, turned, on its side or flat — and shows the way or where it gets stuck
 - **My things**: your own furniture kept for every home; put it all into a plan, and see which home fits it
 - **Roommates**: people with colours, their own spaces, "belongs to" on furniture, warnings for things in someone else's space, and a link round-trip so a roommate adds their own things
 - **Open stairs**: use the space under the stairs; things that are too tall there get a warning
+- **Add things in 3D**: Add → pick → tap the floor; tap a thing to turn, raise/lower or delete it
+- **Wall colours**: per room, or one wall different; inner walls too; shown in 2D and 3D
 - **3D for every home**: single rooms, or all floors stacked (basements below the ground) with a floor picker, "space between floors" slider, real stairs going up through the stair opening and a floor-to-floor height per floor
 - **Over the stair opening**: anything can go there (stairs above stairs, a landing, furniture); you get a yellow warning and can *Let it be*. Hanging lamps and fans never warn
 - **Stacking and height from floor**: put a suitcase on top of a cupboard, boxes under an open cot. Beds and tables are *open (on legs)* or *closed* underneath, with the open space height. Things in the air get a warning; shelves and mirrors can be *fixed to the wall*. Every warning has a one-tap fix where possible and **Let it be**
@@ -122,6 +126,8 @@ Open the Vercel link in **Safari**:
 - [ ] Wall tool: draw a wall, set "From the ceiling down", put a cupboard under it (no warning).
 - [ ] Add a door on an outside wall, select a cupboard → route button → "Yes, it gets in".
 - [ ] Roommates: add two people, draw a space, mark a thing as the other person's → yellow warning.
+- [ ] Plug tool: tap a wall, add a study table far away → yellow warning with a cord length.
+- [ ] Upstairs: Rooms → Add floor over the stairs, drag over the top of the stairs → head room warning.
 - [ ] Rooms → Add a floor or basement → basement: add a car. Make the garage door narrow: yellow warning.
 - [ ] One finger drags furniture and moves the plan. Two fingers pinch. The page never scrolls or zooms by itself.
 - [ ] More → 3D view turns smoothly. Save as image and Download backup open the share sheet.

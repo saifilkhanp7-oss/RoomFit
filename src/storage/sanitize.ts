@@ -1,7 +1,7 @@
 import { sanitizeEstimate } from '../geometry/estimate';
 // Checks plans coming from outside (share links, backup files) and rebuilds them
 // with only known fields, so a broken or edited file can't break the app.
-import type { Floor, Home, Item, ItemTemplate, Layout, Opening, Partition, Person, Room, Side, Zone } from '../model/types';
+import type { Cover, Floor, Home, Item, ItemTemplate, Layout, Opening, Partition, Person, PowerPoint, Room, Side, Zone } from '../model/types';
 import { id as newId } from '../model/defaults.js';
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -12,6 +12,7 @@ const optNum = (v: unknown, min: number, max: number) => (typeof v === 'number' 
 const oneOf = <T extends string>(v: unknown, opts: readonly T[], fallback: T): T => (opts.includes(v as T) ? (v as T) : fallback);
 const color = (v: unknown) => (typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : '#9aa0a6');
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left'];
+const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v);
 
 function room(r: any): Room | null {
   if (!isObj(r)) return null;
@@ -24,6 +25,8 @@ function room(r: any): Room | null {
     length: num(r.length, 3000, 100, 100000),
     ceilingMm: optNum(r.ceilingMm, 1000, 10000),
     ...(r.kind && r.kind !== 'room' ? { kind: oneOf(r.kind, ['room', 'hall', 'bathroom', 'kitchen', 'balcony', 'parking', 'store'] as const, 'room') } : {}),
+    ...(isColor(r.wallColor) ? { wallColor: r.wallColor } : {}),
+    ...(isObj(r.sideColors) ? { sideColors: Object.fromEntries(SIDES.filter((s) => isColor(r.sideColors[s])).map((s) => [s, r.sideColors[s]])) } : {}),
   };
 }
 
@@ -62,6 +65,7 @@ function item(i: any): Item | null {
     openBelowMm: optNum(i.openBelowMm, 0, 20000),
     wallMounted: typeof i.wallMounted === 'boolean' ? i.wallMounted : undefined,
     ...(typeof i.owner === 'string' && i.owner.length <= 40 ? { owner: i.owner } : {}),
+    ...(i.power === 'none' || i.power === 'light' || i.power === 'heavy' ? { power: i.power } : {}),
     mount: i.mount ? oneOf(i.mount, ['floor', 'ceiling', 'under'] as const, 'floor') : undefined,
     locked: i.locked === true ? true : undefined,
   };
@@ -88,11 +92,28 @@ function partition(p: any): Partition | null {
     thicknessMm: num(p.thicknessMm, 114, 20, 1000),
     bottomMm: num(p.bottomMm, 0, 0, 10000),
     ...(top !== undefined ? { topMm: top } : {}),
+    ...(isColor(p.color) ? { color: p.color } : {}),
   };
 }
 function zone(z: any): Zone | null {
   if (!isObj(z) || typeof z.personId !== 'string') return null;
   return { id: str(z.id, newId(), 40), personId: z.personId.slice(0, 40), x: num(z.x, 0), y: num(z.y, 0), width: num(z.width, 1000, 100, 1e6), length: num(z.length, 1000, 100, 1e6) };
+}
+function powerPoint(p: any, rooms: Set<string>): PowerPoint | null {
+  if (!isObj(p) || !rooms.has(p.roomId)) return null;
+  const h = optNum(p.heightMm, 0, 5000);
+  return {
+    id: str(p.id, newId(), 40),
+    roomId: p.roomId,
+    side: oneOf(p.side, SIDES, 'top'),
+    offsetMm: num(p.offsetMm, 0, 0, 1e6),
+    kind: oneOf(p.kind, ['board', 'socket', 'power', 'switch'] as const, 'board'),
+    ...(h !== undefined ? { heightMm: h } : {}),
+  };
+}
+function cover(c: any): Cover | null {
+  if (!isObj(c)) return null;
+  return { id: str(c.id, newId(), 40), x: num(c.x, 0), y: num(c.y, 0), width: num(c.width, 500, 50, 1e5), length: num(c.length, 500, 50, 1e5) };
 }
 function person(p: any): Person | null {
   if (!isObj(p)) return null;
@@ -115,6 +136,8 @@ function floor(f: any, index: number): Floor | null {
     items: (Array.isArray(f.items) ? f.items : []).map(item).filter(Boolean).slice(0, 2000) as Item[],
     ...(Array.isArray(f.partitions) ? { partitions: f.partitions.map(partition).filter(Boolean).slice(0, 500) as Partition[] } : {}),
     ...(Array.isArray(f.zones) ? { zones: f.zones.map(zone).filter(Boolean).slice(0, 50) as Zone[] } : {}),
+    ...(Array.isArray(f.points) ? { points: f.points.map((p: any) => powerPoint(p, ids)).filter(Boolean).slice(0, 300) as PowerPoint[] } : {}),
+    ...(Array.isArray(f.covers) ? { covers: f.covers.map(cover).filter(Boolean).slice(0, 50) as Cover[] } : {}),
     ...(Array.isArray(f.okWarnings)
       ? { okWarnings: f.okWarnings.filter((w: unknown) => typeof w === 'string' && w.length < 120).slice(0, 500) }
       : {}),

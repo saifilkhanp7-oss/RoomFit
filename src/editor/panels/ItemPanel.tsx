@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownToLine, Copy, Layers, Lock, RotateCcw, RotateCw, Trash2, Unlock, BookmarkPlus, Route } from 'lucide-react';
 import type { Item, Unit, Person } from '../../model/types';
 import { LengthInput } from '../../components/LengthInput';
-import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow, itemDrop } from '../../model/catalog';
+import { COLOR_SWATCHES, DEFAULT_ITEM_HEIGHT, catalogEntry, fi, isStairs, isWallFixed, itemElevation, itemHeight, itemMount, itemOpenBelow, itemDrop, itemPower } from '../../model/catalog';
 import { normAngle } from '../../geometry/items';
 import { DEFAULT_CEILING } from '../../geometry/warnings';
 import { formatLength } from '../../model/units';
@@ -195,6 +195,29 @@ export function ItemPanel({ item, unit, ceilingMm, onChange, onRotate, onDuplica
           {item.stairs?.open && <p className="hint" style={{ marginTop: -6 }}>Things can go under the stairs where they're low enough. The space is higher towards the top of the stairs.</p>}
           <p className="hint" style={{ marginTop: -4 }}>The arrow shows the way up. The floor above gets a stair opening here; anything you put over it gets a warning you can let be.</p>
         </>
+      )}
+
+      {!isStairs(item) && itemMount(item) !== 'under' && (
+        <div className="field">
+          <span className="field-label">Needs a plug</span>
+          <div className="segmented" role="group" aria-label="Needs a plug">
+            {(
+              [
+                ['none', 'No'],
+                ['light', 'Yes'],
+                ['heavy', 'Big appliance'],
+              ] as const
+            ).map(([v, l]) => {
+              const cur = itemPower(item);
+              const on = cur === v || (v === 'heavy' && cur === 'ac');
+              return (
+                <button key={v} aria-pressed={on} onClick={() => onChange({ power: v === 'heavy' && cur === 'ac' ? undefined : v })}>
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {people.length > 0 && !isStairs(item) && (
