@@ -1,36 +1,21 @@
 import { useState } from 'react';
-import { Cloud, CloudOff, KeyRound, LogOut, RefreshCw, Trash2 } from 'lucide-react';
+import { KeyRound, LogOut, Trash2 } from 'lucide-react';
 import { Dialog } from '../components/Dialog';
 import { PasswordInput } from './AuthScreen';
 import { accountDeleted, logout, useAuth } from './useAuth';
-import { syncNow, useSync } from '../sync/sync';
 import { authApi, type ApiError } from '../api/client';
-import { timeAgo } from '../utils/time';
 import { navigate } from '../router';
 import { useToast } from '../components/Toast';
 import './auth.css';
 
-export function syncText(s: ReturnType<typeof useSync.getState>): string {
-  if (s.status === 'syncing') return 'Saving to your account…';
-  if (s.status === 'offline') return s.pending ? `Offline · ${s.pending} change${s.pending === 1 ? '' : 's'} will sync later` : 'Offline · will sync later';
-  if (s.status === 'error') return s.message ?? 'Could not sync';
-  if (s.pending) return `${s.pending} change${s.pending === 1 ? '' : 's'} waiting to sync`;
-  if (s.lastSyncedAt) return `Saved to your account · ${timeAgo(s.lastSyncedAt)}`;
-  return 'Saved to your account';
-}
-
-/** Small button with the user's initial and sync dot, for headers. */
+/** Small button with the user's initial, for headers. */
 export function AccountChip({ onClick }: { onClick: () => void }) {
   const user = useAuth((s) => s.user);
-  const status = useSync((s) => s.status);
-  const pending = useSync((s) => s.pending);
   if (!user) return null;
-  const dot = pending && status !== 'syncing' ? (status === 'offline' ? 'offline' : status === 'error' ? 'error' : 'syncing') : status;
   return (
     <button className="sync-chip" onClick={onClick} aria-label={`Account: ${user.name}`}>
       <span className="mini-avatar">{user.name.slice(0, 1).toUpperCase()}</span>
       <span className="chip-name">{user.name}</span>
-      <span className={`sync-dot ${dot}`} aria-hidden />
     </button>
   );
 }
@@ -39,7 +24,6 @@ type View = 'main' | 'logout-warn' | 'code' | 'delete';
 
 export function AccountDialog({ onClose }: { onClose: () => void }) {
   const user = useAuth((s) => s.user);
-  const sync = useSync();
   const [view, setView] = useState<View>('main');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -132,15 +116,8 @@ export function AccountDialog({ onClose }: { onClose: () => void }) {
         <span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span>
         <div>
           <strong style={{ fontSize: 17 }}>{user.name}</strong>
-          <div className="hint">Logged in on this device</div>
+          <div className="hint">Your homes are the same on every device you log in on.</div>
         </div>
-      </div>
-      <div className="sync-line" role="status">
-        {sync.status === 'offline' ? <CloudOff size={18} /> : <Cloud size={18} />}
-        <span>{syncText(sync)}</span>
-        <button className="btn" disabled={sync.status === 'syncing'} onClick={() => syncNow()}>
-          <RefreshCw size={14} /> Sync
-        </button>
       </div>
       <div className="action-list">
         <button className="action-item" onClick={() => setView('code')}>

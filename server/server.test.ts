@@ -192,6 +192,58 @@ describe('sync', () => {
     expect(r.templates.data[0].label).toBe('Guitar');
   });
 
+  it('a bad plan does not stop the other plans from syncing', async () => {
+    const good = home('Good one');
+    const res = await syncPOST(post('/api/sync', { since: 0, homes: [{ id: 'broken', data: { name: 'x', layouts: 'nope' }, updatedAt: 7 }, { id: good.id, data: good, updatedAt: 7 }] }, a));
+    expect(res.status).toBe(200);
+    const r = await res.json();
+    expect(r.rejected).toEqual([{ id: 'broken', reason: 'Bad plan data' }]);
+    expect(r.homes.some((x: any) => x.id === good.id)).toBe(true);
+  });
+
+  it('keeps everything a plan can have (walls inside, costs, roommates, plugs, colours…)', async () => {
+    const h = home('Full plan');
+    const f = h.layouts[0].floors[0];
+    const room = f.rooms[0];
+    room.wallColor = '#d6e6f5';
+    room.sideColors = { right: '#264653' };
+    f.partitions = [{ id: 'p1', a: { x: 0, y: 1500 }, b: { x: 2000, y: 1500 }, thicknessMm: 114, bottomMm: 2134, color: '#fbe7c6' }];
+    f.zones = [{ id: 'z1', personId: 'aman', x: 0, y: 0, width: 1500, length: 3000 }];
+    f.points = [{ id: 'pt', roomId: room.id, side: 'left', offsetMm: 300, kind: 'power', heightMm: 2134 }];
+    f.covers = [{ id: 'c1', x: 0, y: 0, width: 900, length: 900 }];
+    f.items.push({ id: 'ac', type: 'ac', label: 'AC', x: 1800, y: 150, width: 965, depth: 229, rotation: 0, shape: 'rect', color: '#e6edf2', owner: 'aman', power: 'heavy', elevationMm: 2134 });
+    h.people = [{ id: 'aman', name: 'Aman', color: '#e8590c' }];
+    h.meId = 'aman';
+    h.layouts[0].estimate = {
+      currency: '₹',
+      brick: { lengthMm: 229, widthMm: 114, heightMm: 76, jointMm: 10, price: 9, wastePct: 6 },
+      walls: true,
+      stairs: true,
+      ceiling: false,
+      ceilingMm: 125,
+      tile: { lengthMm: 600, widthMm: 600, gapMm: 2, price: 99 },
+      tileWastePct: 10,
+      rooms: { [room.id]: { mode: 'none' } },
+      paint: { coats: 3, coverageM2: 10, price: 300, ceiling: false, outside: true },
+      cement: { price: 450, mortarMix: 5, plaster: true, plasterMix: 4, plasterMm: 15, plasterOutside: false, tileBed: false, tileBedMm: 20, tileBedMix: 4 },
+    };
+    const r = await (await syncPOST(post('/api/sync', { since: 0, homes: [{ id: h.id, data: h, updatedAt: 9 }] }, a))).json();
+    const got = r.homes.find((x: any) => x.id === h.id).data;
+    const gf = got.layouts[0].floors[0];
+    expect(gf.rooms[0].wallColor).toBe('#d6e6f5');
+    expect(gf.rooms[0].sideColors).toEqual({ right: '#264653' });
+    expect(gf.partitions[0]).toMatchObject({ bottomMm: 2134, color: '#fbe7c6' });
+    expect(gf.zones[0].personId).toBe('aman');
+    expect(gf.points[0]).toMatchObject({ kind: 'power', heightMm: 2134 });
+    expect(gf.covers).toHaveLength(1);
+    expect(gf.items.find((i: any) => i.id === 'ac')).toMatchObject({ owner: 'aman', power: 'heavy', elevationMm: 2134 });
+    expect(got.people[0].name).toBe('Aman');
+    expect(got.meId).toBe('aman');
+    expect(got.layouts[0].estimate.paint.coats).toBe(3);
+    expect(got.layouts[0].estimate.cement.mortarMix).toBe(5);
+    expect(got.layouts[0].estimate.rooms[room.id]).toEqual({ mode: 'none' });
+  });
+
   it('delete account removes everything', async () => {
     expect((await accountPOST(post('/api/account', { password: 'wrong' }, b))).status).toBe(401);
     expect((await accountPOST(post('/api/account', { password: 'secret123' }, b))).status).toBe(200);

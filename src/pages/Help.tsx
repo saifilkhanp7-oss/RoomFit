@@ -253,7 +253,8 @@ export function Help() {
               Write down the <strong>recovery code</strong> you get. If you forget your password: Log in → "Forgot password?" → your name + the code. It works once; you then get a new code.
             </li>
             <li>Your plans are saved to your account, so they are on all your devices. Without internet, changes are kept on the device and sent later.</li>
-            <li>The round button with your first letter (top right) shows the sync status, log out and delete account.</li>
+            <li>Log in with the same name on your phone and laptop and you see the same homes. Changes show up on the other device within a minute, or when you open the app.</li>
+            <li>The round button with your first letter (top right) has log out and delete account.</li>
           </ul>
         </section>
         <section>

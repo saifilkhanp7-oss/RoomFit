@@ -77,8 +77,15 @@ function updatePending() {
   useSync.setState({ pending: localChanges(meta).length + (t > meta.templatesSyncedAt ? 1 : 0) });
 }
 
+/** Once per app start: fetch every home from the account, not only the latest changes. */
+let fullPending = false;
+
 async function runOnce(uid: string) {
   const meta = loadMeta(uid);
+  if (fullPending) {
+    meta.since = 0;
+    fullPending = false;
+  }
   const changes = localChanges(meta);
   const state = useAppStore.getState().data;
   const tUpdated = state.templatesUpdatedAt ?? 0;
@@ -95,6 +102,7 @@ async function runOnce(uid: string) {
       since: number;
       homes: { id: string; deleted: boolean; updatedAt: number; data: Home | null }[];
       templates?: { data: ItemTemplate[]; updatedAt: number };
+      rejected?: { id: string; reason: string }[];
     }>('/api/sync', {
       body: {
         since: meta.since,
@@ -109,8 +117,10 @@ async function runOnce(uid: string) {
       else meta.synced[h.id] = h.updatedAt;
     }
     const returned = new Set(res.homes.map((h) => h.id));
+    const rejected = new Set((res.rejected ?? []).map((r) => r.id));
+    if (rejected.size) console.warn('RoomFit: some plans could not be saved to the account', res.rejected);
     for (const c of chunk) {
-      if (returned.has(c.id)) continue;
+      if (returned.has(c.id) || rejected.has(c.id)) continue;
       // the cloud already had this exact version (or a newer one we have)
       if (c.deleted) delete meta.synced[c.id];
       else meta.synced[c.id] = c.updatedAt;
@@ -179,12 +189,19 @@ function wireOnce() {
   });
   setInterval(() => {
     if (document.visibilityState === 'visible') void syncNow();
-  }, 60_000);
+  }, 30_000);
+  // back to the app after a while: get everything again, to be sure
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 5 * 60_000) fullPending = true;
+  });
 }
 
 /** Start syncing for this user (call after login / on app start). */
 export function startSync(uid: string, loggedOut: () => void) {
   userId = uid;
+  fullPending = true;
   onLoggedOut = loggedOut;
   wireOnce();
   updatePending();

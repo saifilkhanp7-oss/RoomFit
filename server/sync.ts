@@ -22,18 +22,37 @@ export async function sync(req: Request): Promise<Response> {
   if (incoming.length > MAX_HOMES_PER_REQUEST) throw new HttpError(413, 'Too many changes at once');
 
   const db = await getDb();
+  // One bad plan must not stop the others from syncing: skip it and say which one.
+  const rejected: { id: string; reason: string }[] = [];
   return db.tx(async (q) => {
     for (const h of incoming) {
-      if (typeof h?.id !== 'string' || !h.id || h.id.length > 40) throw new HttpError(400, 'Bad home id');
+      if (typeof h?.id !== 'string' || !h.id || h.id.length > 40) {
+        rejected.push({ id: String(h?.id ?? '').slice(0, 40), reason: 'Bad home id' });
+        continue;
+      }
       const updatedAt = Number(h.updatedAt);
-      if (!Number.isFinite(updatedAt) || updatedAt <= 0) throw new HttpError(400, 'Bad time');
+      if (!Number.isFinite(updatedAt) || updatedAt <= 0) {
+        rejected.push({ id: h.id, reason: 'Bad time' });
+        continue;
+      }
       let data: unknown = null;
       if (!h.deleted) {
-        const clean = sanitizeHome({ ...(h.data as object), id: h.id });
-        if (!clean) throw new HttpError(400, 'Bad plan data');
+        let clean: ReturnType<typeof sanitizeHome> = null;
+        try {
+          clean = sanitizeHome({ ...(h.data as object), id: h.id });
+        } catch {
+          clean = null;
+        }
+        if (!clean) {
+          rejected.push({ id: h.id, reason: 'Bad plan data' });
+          continue;
+        }
         clean.updatedAt = updatedAt;
         const text = JSON.stringify(clean);
-        if (text.length > MAX_HOME_BYTES) throw new HttpError(413, `"${clean.name}" is too big to save`);
+        if (text.length > MAX_HOME_BYTES) {
+          rejected.push({ id: h.id, reason: `"${clean.name}" is too big to save` });
+          continue;
+        }
         data = text;
       }
       // Insert, or replace only if this change is newer than what the server has.
@@ -72,6 +91,7 @@ export async function sync(req: Request): Promise<Response> {
       [user.id],
     );
     return json({
+      ...(rejected.length ? { rejected } : {}),
       since: Math.max(since, Number(max) || 0),
       homes: homes.map((h) => ({ id: h.id, deleted: h.deleted, updatedAt: h.updatedAt, data: h.deleted ? null : h.data })),
       templates: state[0] ? { data: state[0].templates, updatedAt: state[0].updatedAt } : undefined,

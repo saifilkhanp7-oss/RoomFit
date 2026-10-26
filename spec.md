@@ -653,3 +653,10 @@ Emulated WebKit is close to Safari but not identical — especially for touch ge
 ## 22. Dragging in 3D (added later)
 
 Pressing on a thing in 3D picks it and starts a drag: the camera controls are switched off until the finger lifts, and the finger's ray meets a flat plane at the height where the thing was grabbed, so it slides along the floor under the finger. The first move (over 6 px) makes one undo step; the frames of the drag don't. Pressing empty space still turns the view.
+
+## 23. Sync fix (added later)
+
+- **Bug:** `src/storage/sanitize.ts` (shared with the server) imported `../geometry/estimate` without `.js`. Vercel runs `api/` as plain Node ES modules, so `/api/sync` crashed (module not found) and every device kept only its own plans. Local tests didn't catch it because the dev server's bundler doesn't need `.js`.
+- **Fix:** the cost-settings checker moved to `src/storage/sanitizeEstimate.ts` (no app imports). `scripts/check-server-imports.mjs` follows every import reachable from `api/` and fails if one doesn't end in `.js` or doesn't exist; it runs first in `npm run build` (a broken backend can't be deployed) and as a unit test.
+- **Sturdier sync:** a bad or too-big plan is skipped (`rejected` in the reply) instead of failing the whole sync; each app start (and coming back after 5+ minutes) fetches every home, not only recent changes; changes are checked every 30 s while the app is open. Plans that were stuck on one device are sent automatically, so all devices end up with the same homes (newest change wins for the same home).
+- The sync status line and dot in the account box were removed.

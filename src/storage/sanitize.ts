@@ -1,4 +1,4 @@
-import { sanitizeEstimate } from '../geometry/estimate';
+import { sanitizeEstimate } from './sanitizeEstimate.js';
 // Checks plans coming from outside (share links, backup files) and rebuilds them
 // with only known fields, so a broken or edited file can't break the app.
 import type { Cover, Floor, Home, Item, ItemTemplate, Layout, Opening, Partition, Person, PowerPoint, Room, Side, Zone } from '../model/types';
